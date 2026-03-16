@@ -11,6 +11,7 @@ import 'package:avdibook/features/audiobooks/domain/models/audiobook_author.dart
 import 'package:avdibook/features/setup/presentation/providers/setup_controller.dart';
 import 'package:avdibook/shared/providers/app_state_provider.dart';
 import 'package:avdibook/shared/providers/app_bootstrap_provider.dart';
+import 'package:avdibook/shared/providers/bookmarks_provider.dart';
 import 'package:avdibook/shared/providers/library_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -75,9 +76,48 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     await ref.read(startupStorageServiceProvider).setLibraryItems(merged);
   }
 
-  void _showComingSoon(String feature) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$feature — coming soon')),
+  Future<void> _showVolumeSheet(double currentVolume) async {
+    var temp = currentVolume;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 22),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        temp == 0
+                            ? Icons.volume_off_rounded
+                            : temp < 0.5
+                                ? Icons.volume_down_rounded
+                                : Icons.volume_up_rounded,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Slider(
+                          value: temp,
+                          onChanged: (v) {
+                            setLocal(() => temp = v);
+                            ref.read(playerProvider.notifier).setVolume(v);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text('${(temp * 100).round()}%'),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -137,7 +177,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                   _RoundedIconButton(
                     icon: Icons.volume_up_rounded,
                     scheme: scheme,
-                    onTap: () => _showComingSoon('Volume control'),
+                    onTap: () => _showVolumeSheet(playerState.volume),
                   ),
                   const SizedBox(width: 8),
                   _RoundedIconButton(
@@ -199,7 +239,24 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                   _RoundedIconButton(
                     icon: Icons.playlist_add_check_rounded,
                     scheme: scheme,
-                    onTap: () => _showComingSoon('Bookmarks'),
+                    onTap: book == null
+                        ? null
+                        : () async {
+                            await ref.read(bookmarksProvider.notifier).add(
+                                  bookId: book.id,
+                                  position: playerState.position,
+                                  label:
+                                      'At ${DurationFormatter.format(playerState.position)}',
+                                );
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Bookmark added.'),
+                                duration: Duration(milliseconds: 900),
+                              ),
+                            );
+                            context.push(AppRoutes.bookmarksPath(book.id));
+                          },
                   ),
                 ],
               ),

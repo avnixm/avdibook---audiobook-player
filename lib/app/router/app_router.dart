@@ -6,6 +6,8 @@ import 'package:avdibook/features/home/presentation/screens/home_screen.dart';
 import 'package:avdibook/features/library/presentation/screens/library_screen.dart';
 import 'package:avdibook/features/onboarding/presentation/screens/onboarding_screen.dart';
 import 'package:avdibook/features/player/presentation/providers/player_provider.dart';
+import 'package:avdibook/features/player/presentation/screens/bookmarks_screen.dart';
+import 'package:avdibook/features/player/presentation/screens/chapter_list_screen.dart';
 import 'package:avdibook/features/search/presentation/screens/search_screen.dart';
 import 'package:avdibook/features/settings/presentation/screens/settings_screen.dart';
 import 'package:avdibook/features/settings/presentation/screens/about_screen.dart';
@@ -77,6 +79,22 @@ class AppRouter {
               );
             },
           );
+        },
+      ),
+
+      GoRoute(
+        path: AppRoutes.chapterList,
+        builder: (context, state) {
+          final bookId = state.pathParameters['bookId'] ?? '';
+          return ChapterListScreen(bookId: bookId);
+        },
+      ),
+
+      GoRoute(
+        path: AppRoutes.bookmarks,
+        builder: (context, state) {
+          final bookId = state.pathParameters['bookId'] ?? '';
+          return BookmarksScreen(bookId: bookId);
         },
       ),
 

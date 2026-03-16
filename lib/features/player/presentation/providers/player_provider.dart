@@ -17,6 +17,7 @@ class PlayerState {
     this.speed = 1.0,
     this.shuffleEnabled = false,
     this.loopMode = LoopMode.off,
+    this.volume = 1.0,
     this.error,
   });
 
@@ -29,6 +30,7 @@ class PlayerState {
   final double speed;
   final bool shuffleEnabled;
   final LoopMode loopMode;
+  final double volume;
   final String? error;
 
   bool get isLoaded => bookId != null && !isLoading;
@@ -48,6 +50,7 @@ class PlayerState {
     double? speed,
     bool? shuffleEnabled,
     LoopMode? loopMode,
+    double? volume,
     String? error,
     bool clearError = false,
   }) {
@@ -61,6 +64,7 @@ class PlayerState {
       speed: speed ?? this.speed,
       shuffleEnabled: shuffleEnabled ?? this.shuffleEnabled,
       loopMode: loopMode ?? this.loopMode,
+      volume: volume ?? this.volume,
       error: clearError ? null : (error ?? this.error),
     );
   }
@@ -96,6 +100,10 @@ class PlayerNotifier extends Notifier<PlayerState> {
 
     _player.currentIndexStream.listen((i) {
       if (i != null) state = state.copyWith(currentChapterIndex: i);
+    });
+
+    _player.volumeStream.listen((v) {
+      state = state.copyWith(volume: v.clamp(0.0, 1.0));
     });
 
     ref.onDispose(() {
@@ -204,6 +212,12 @@ class PlayerNotifier extends Notifier<PlayerState> {
     state = state.copyWith(speed: speed);
   }
 
+  Future<void> setVolume(double volume) async {
+    final normalized = volume.clamp(0.0, 1.0);
+    await _player.setVolume(normalized);
+    state = state.copyWith(volume: normalized);
+  }
+
   Future<void> toggleShuffle() async {
     final next = !state.shuffleEnabled;
     await _player.setShuffleModeEnabled(next);
@@ -218,6 +232,15 @@ class PlayerNotifier extends Notifier<PlayerState> {
     };
     await _player.setLoopMode(next);
     state = state.copyWith(loopMode: next);
+  }
+
+  Future<void> seekToChapterIndex(int chapterIndex) async {
+    if (chapterIndex < 0) return;
+    await _player.seek(Duration.zero, index: chapterIndex);
+  }
+
+  Future<void> seekToPosition(Duration position) async {
+    await _player.seek(position < Duration.zero ? Duration.zero : position);
   }
 
   void _trackListeningProgress(Duration currentPosition) {
