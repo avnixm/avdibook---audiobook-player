@@ -126,3 +126,23 @@ class GlobalPlaybackSpeedNotifier extends Notifier<double> {
 final globalPlaybackSpeedProvider =
     NotifierProvider<GlobalPlaybackSpeedNotifier, double>(
         GlobalPlaybackSpeedNotifier.new);
+
+// ─── Global volume ───────────────────────────────────────────────────────────
+
+class GlobalVolumeNotifier extends Notifier<double> {
+  @override
+  double build() {
+    final prefs = ref.watch(sharedPreferencesProvider);
+    return prefs.getDouble('global_volume') ?? 1.0;
+  }
+
+  Future<void> set(double volume) async {
+    final normalized = volume.clamp(0.0, 1.0);
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setDouble('global_volume', normalized);
+    state = normalized;
+  }
+}
+
+final globalVolumeProvider =
+    NotifierProvider<GlobalVolumeNotifier, double>(GlobalVolumeNotifier.new);

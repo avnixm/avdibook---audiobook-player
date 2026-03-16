@@ -58,6 +58,11 @@ class StartupStorageService {
       'sourcePaths': book.sourcePaths,
       'primaryFormat': book.primaryFormat,
       'importedAt': book.importedAt.toIso8601String(),
+      'progress': book.progress,
+      'resumePosition': book.resumePosition?.inMilliseconds,
+      'lastPlayedAt': book.lastPlayedAt?.toIso8601String(),
+      'status': book.status.name,
+      'completedAt': book.completedAt?.toIso8601String(),
       'chapters': book.chapters
           .map(
             (chapter) => {
@@ -91,6 +96,17 @@ class StartupStorageService {
       sourcePaths: List<String>.from(map['sourcePaths'] as List<dynamic>),
       primaryFormat: map['primaryFormat'] as String,
       importedAt: DateTime.parse(map['importedAt'] as String),
+        progress: (map['progress'] as num?)?.toDouble() ?? 0,
+        resumePosition: map['resumePosition'] == null
+          ? null
+          : Duration(milliseconds: map['resumePosition'] as int),
+        lastPlayedAt: map['lastPlayedAt'] == null
+          ? null
+          : DateTime.parse(map['lastPlayedAt'] as String),
+        status: _decodeStatus(map['status'] as String?),
+        completedAt: map['completedAt'] == null
+          ? null
+          : DateTime.parse(map['completedAt'] as String),
       chapters: rawChapters.map((chapterMap) {
         final c = chapterMap as Map<String, dynamic>;
         return AudiobookChapter(
@@ -106,6 +122,14 @@ class StartupStorageService {
               : Duration(milliseconds: c['duration'] as int),
         );
       }).toList(),
+    );
+  }
+
+  BookStatus _decodeStatus(String? rawStatus) {
+    if (rawStatus == null) return BookStatus.newBook;
+    return BookStatus.values.firstWhere(
+      (status) => status.name == rawStatus,
+      orElse: () => BookStatus.newBook,
     );
   }
 }

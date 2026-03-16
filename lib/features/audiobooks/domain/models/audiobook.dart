@@ -3,6 +3,25 @@ import 'package:equatable/equatable.dart';
 import 'audiobook_author.dart';
 import 'audiobook_chapter.dart';
 
+enum BookStatus {
+  newBook,
+  started,
+  finished;
+
+  static BookStatus fromProgress(double progress) {
+    final normalized = progress.clamp(0.0, 1.0);
+    if (normalized >= 0.98) return BookStatus.finished;
+    if (normalized > 0.01) return BookStatus.started;
+    return BookStatus.newBook;
+  }
+
+  String get label => switch (this) {
+        BookStatus.newBook => 'New',
+        BookStatus.started => 'Started',
+        BookStatus.finished => 'Finished',
+      };
+}
+
 class Audiobook extends Equatable {
   const Audiobook({
     required this.id,
@@ -17,6 +36,11 @@ class Audiobook extends Equatable {
     this.coverPath,
     this.series,
     this.genre,
+    this.progress = 0.0,
+    this.resumePosition,
+    this.lastPlayedAt,
+    this.status = BookStatus.newBook,
+    this.completedAt,
   });
 
   final String id;
@@ -31,9 +55,16 @@ class Audiobook extends Equatable {
   final List<String> sourcePaths;
   final String primaryFormat;
   final DateTime importedAt;
+  final double progress;
+  final Duration? resumePosition;
+  final DateTime? lastPlayedAt;
+  final BookStatus status;
+  final DateTime? completedAt;
 
   bool get isSingleFile => sourcePaths.length == 1;
   int get chapterCount => chapters.length;
+  bool get isFinished => status == BookStatus.finished;
+  bool get hasProgress => progress > 0;
 
   Audiobook copyWith({
     String? id,
@@ -54,6 +85,14 @@ class Audiobook extends Equatable {
     List<String>? sourcePaths,
     String? primaryFormat,
     DateTime? importedAt,
+    double? progress,
+    Duration? resumePosition,
+    bool clearResumePosition = false,
+    DateTime? lastPlayedAt,
+    bool clearLastPlayedAt = false,
+    BookStatus? status,
+    DateTime? completedAt,
+    bool clearCompletedAt = false,
   }) {
     return Audiobook(
       id: id ?? this.id,
@@ -69,6 +108,15 @@ class Audiobook extends Equatable {
       sourcePaths: sourcePaths ?? this.sourcePaths,
       primaryFormat: primaryFormat ?? this.primaryFormat,
       importedAt: importedAt ?? this.importedAt,
+        progress: progress ?? this.progress,
+        resumePosition: clearResumePosition
+          ? null
+          : (resumePosition ?? this.resumePosition),
+        lastPlayedAt:
+          clearLastPlayedAt ? null : (lastPlayedAt ?? this.lastPlayedAt),
+        status: status ?? this.status,
+        completedAt:
+          clearCompletedAt ? null : (completedAt ?? this.completedAt),
     );
   }
 
@@ -86,5 +134,10 @@ class Audiobook extends Equatable {
         sourcePaths,
         primaryFormat,
         importedAt,
+        progress,
+        resumePosition,
+        lastPlayedAt,
+        status,
+        completedAt,
       ];
 }
