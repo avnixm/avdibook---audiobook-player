@@ -184,14 +184,22 @@ class PlayerNotifier extends Notifier<PlayerState> {
 
   void togglePlay() {
     if (state.isPlaying) {
-      _player.pause();
+      pause();
     } else {
-      final bookId = state.bookId;
-      if (bookId != null) {
-        unawaited(ref.read(listeningAnalyticsProvider.notifier).startSession(bookId));
-      }
-      _player.play();
+      play();
     }
+  }
+
+  void play() {
+    final bookId = state.bookId;
+    if (bookId != null && !_player.playing) {
+      unawaited(ref.read(listeningAnalyticsProvider.notifier).startSession(bookId));
+    }
+    _player.play();
+  }
+
+  void pause() {
+    _player.pause();
   }
 
   Future<void> seekTo(double fraction) async {

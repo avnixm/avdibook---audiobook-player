@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:audio_metadata_reader/audio_metadata_reader.dart';
@@ -27,6 +28,7 @@ class AudioMetadataService {
 
     // Prefer container formats that commonly carry rich tags for audiobooks.
     final prioritized = [...filePaths]..sort(_sourcePriorityCompare);
+    ExtractedAudioMetadata? bestEffort;
 
     for (final path in prioritized) {
       try {
@@ -48,13 +50,49 @@ class AudioMetadataService {
           coverPath: coverPath,
         );
 
+        bestEffort ??= extracted;
+
+        if (coverPath == null && (title != null || author != null)) {
+          final downloadedCover = await _downloadCoverFromOpenLibrary(
+            title: title,
+            author: author,
+            sourcePath: path,
+          );
+          if (downloadedCover != null) {
+            return ExtractedAudioMetadata(
+              title: title,
+              author: author,
+              genre: genre,
+              coverPath: downloadedCover,
+            );
+          }
+        }
+
         if (extracted.hasAnyValue) return extracted;
       } catch (_) {
         // Keep trying other paths if one file cannot be parsed.
       }
     }
 
-    return null;
+    if (bestEffort != null &&
+        bestEffort.coverPath == null &&
+        (bestEffort.title != null || bestEffort.author != null)) {
+      final downloadedCover = await _downloadCoverFromOpenLibrary(
+        title: bestEffort.title,
+        author: bestEffort.author,
+        sourcePath: filePaths.first,
+      );
+      if (downloadedCover != null) {
+        return ExtractedAudioMetadata(
+          title: bestEffort.title,
+          author: bestEffort.author,
+          genre: bestEffort.genre,
+          coverPath: downloadedCover,
+        );
+      }
+    }
+
+    return bestEffort;
   }
 
   Future<String?> _storeCoverIfPresent(
@@ -81,6 +119,81 @@ class AudioMetadataService {
       return destination.path;
     } catch (_) {
       return null;
+    }
+  }
+
+  Future<String?> _downloadCoverFromOpenLibrary({
+    required String? title,
+    required String? author,
+    required String sourcePath,
+  }) async {
+    final cleanTitle = _clean(title);
+    final cleanAuthor = _clean(author);
+    if (cleanTitle == null && cleanAuthor == null) return null;
+
+    try {
+      final query = <String, String>{
+        'limit': '1',
+        'fields': 'cover_i,title,author_name',
+      };
+      if (cleanTitle != null) query['title'] = cleanTitle;
+      if (cleanAuthor != null) query['author'] = cleanAuthor;
+
+      final searchUri = Uri.https('openlibrary.org', '/search.json', query);
+      final searchBody = await _httpGetString(searchUri);
+      if (searchBody == null || searchBody.isEmpty) return null;
+
+      final map = jsonDecode(searchBody) as Map<String, dynamic>;
+      final docs = (map['docs'] as List<dynamic>?) ?? const [];
+      if (docs.isEmpty) return null;
+
+      final top = docs.first as Map<String, dynamic>;
+      final coverId = top['cover_i'];
+      if (coverId is! num) return null;
+
+      final coverUri = Uri.parse(
+        'https://covers.openlibrary.org/b/id/${coverId.toInt()}-L.jpg',
+      );
+      final bytes = await _httpGetBytes(coverUri);
+      if (bytes == null || bytes.isEmpty) return null;
+
+      return _storeCoverIfPresent(sourcePath, bytes);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<String?> _httpGetString(Uri uri) async {
+    final client = HttpClient();
+    try {
+      final request = await client.getUrl(uri);
+      final response = await request.close();
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return null;
+      }
+      return utf8.decode(await response.fold<List<int>>(
+        <int>[],
+        (buffer, chunk) => buffer..addAll(chunk),
+      ));
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  Future<List<int>?> _httpGetBytes(Uri uri) async {
+    final client = HttpClient();
+    try {
+      final request = await client.getUrl(uri);
+      final response = await request.close();
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return null;
+      }
+      return response.fold<List<int>>(
+        <int>[],
+        (buffer, chunk) => buffer..addAll(chunk),
+      );
+    } finally {
+      client.close(force: true);
     }
   }
 
