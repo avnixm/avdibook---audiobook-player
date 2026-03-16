@@ -501,6 +501,20 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                   children: [
                     Expanded(
                       child: _MiniActionButton(
+                        icon: Icons.history_rounded,
+                        label: 'Undo',
+                        active: playerState.previousPosition != null,
+                        scheme: scheme,
+                        accentColor: accentColor,
+                        onTap: playerState.previousPosition == null
+                            ? null
+                            : () => ref
+                                .read(playerProvider.notifier)
+                                .undoLastJump(),
+                      ),
+                    ),
+                    Expanded(
+                      child: _MiniActionButton(
                         icon: Icons.shuffle_rounded,
                         active: playerState.shuffleEnabled,
                         scheme: scheme,
@@ -861,7 +875,7 @@ class _MiniActionButton extends StatelessWidget {
   final bool active;
   final ColorScheme scheme;
   final Color accentColor;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final String? label;
 
   @override
@@ -874,6 +888,7 @@ class _MiniActionButton extends StatelessWidget {
       color: bg,
       borderRadius: BorderRadius.circular(14),
       child: ExpressiveBounce(
+        enabled: onTap != null,
         child: InkWell(
           borderRadius: BorderRadius.circular(14),
           onTap: onTap,

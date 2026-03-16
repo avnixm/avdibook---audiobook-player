@@ -21,6 +21,7 @@ class PlayerState {
     this.shuffleEnabled = false,
     this.loopMode = LoopMode.off,
     this.volume = 1.0,
+    this.previousPosition,
     this.error,
   });
 
@@ -34,6 +35,7 @@ class PlayerState {
   final bool shuffleEnabled;
   final LoopMode loopMode;
   final double volume;
+  final Duration? previousPosition;
   final String? error;
 
   bool get isLoaded => bookId != null && !isLoading;
@@ -54,6 +56,8 @@ class PlayerState {
     bool? shuffleEnabled,
     LoopMode? loopMode,
     double? volume,
+    Duration? previousPosition,
+    bool clearPreviousPosition = false,
     String? error,
     bool clearError = false,
   }) {
@@ -68,6 +72,9 @@ class PlayerState {
       shuffleEnabled: shuffleEnabled ?? this.shuffleEnabled,
       loopMode: loopMode ?? this.loopMode,
       volume: volume ?? this.volume,
+      previousPosition: clearPreviousPosition
+          ? null
+          : (previousPosition ?? this.previousPosition),
       error: clearError ? null : (error ?? this.error),
     );
   }
@@ -203,11 +210,13 @@ class PlayerNotifier extends Notifier<PlayerState> {
   }
 
   Future<void> seekTo(double fraction) async {
+    _rememberUndoPoint();
     final ms = (state.duration.inMilliseconds * fraction.clamp(0.0, 1.0)).round();
     await _player.seek(Duration(milliseconds: ms));
   }
 
   Future<void> skipForward(int seconds) async {
+    _rememberUndoPoint();
     final target = state.position + Duration(seconds: seconds);
     await _player.seek(
       target > state.duration ? state.duration : target,
@@ -215,6 +224,7 @@ class PlayerNotifier extends Notifier<PlayerState> {
   }
 
   Future<void> skipBackward(int seconds) async {
+    _rememberUndoPoint();
     final target = state.position - Duration(seconds: seconds);
     await _player.seek(
       target < Duration.zero ? Duration.zero : target,
@@ -222,10 +232,12 @@ class PlayerNotifier extends Notifier<PlayerState> {
   }
 
   Future<void> nextChapter() async {
+    _rememberUndoPoint();
     await _player.seekToNext();
   }
 
   Future<void> previousChapter() async {
+    _rememberUndoPoint();
     if (state.position.inSeconds > 3) {
       await _player.seek(Duration.zero);
     } else {
@@ -264,11 +276,24 @@ class PlayerNotifier extends Notifier<PlayerState> {
 
   Future<void> seekToChapterIndex(int chapterIndex) async {
     if (chapterIndex < 0) return;
+    _rememberUndoPoint();
     await _player.seek(Duration.zero, index: chapterIndex);
   }
 
   Future<void> seekToPosition(Duration position) async {
+    _rememberUndoPoint();
     await _player.seek(position < Duration.zero ? Duration.zero : position);
+  }
+
+  Future<void> undoLastJump() async {
+    final previous = state.previousPosition;
+    if (previous == null) return;
+    await _player.seek(previous);
+    state = state.copyWith(clearPreviousPosition: true);
+  }
+
+  void _rememberUndoPoint() {
+    state = state.copyWith(previousPosition: state.position);
   }
 
   void _trackListeningProgress(Duration currentPosition) {
