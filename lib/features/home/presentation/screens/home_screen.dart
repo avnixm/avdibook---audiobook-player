@@ -8,6 +8,7 @@ import 'package:avdibook/app/theme/app_spacing.dart';
 import 'package:avdibook/core/constants/app_constants.dart';
 import 'package:avdibook/core/utils/duration_formatter.dart';
 import 'package:avdibook/core/widgets/app_scaffold.dart';
+import 'package:avdibook/core/widgets/expressive_bounce.dart';
 import 'package:avdibook/core/widgets/section_header.dart';
 import 'package:avdibook/core/widgets/soft_icon_button.dart';
 import 'package:avdibook/core/widgets/soft_pill_button.dart';
@@ -162,50 +163,54 @@ class HomeScreen extends ConsumerWidget {
               itemBuilder: (context, index) {
                 final item = library.isEmpty ? null : library[index];
 
-                return GestureDetector(
-                  onTap: item != null
-                      ? () => context.push(AppRoutes.playerPath(item.id))
-                      : null,
-                  child: Container(
-                    width: 130,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: scheme.surfaceContainerHighest,
+                return ExpressiveBounce(
+                  enabled: item != null,
+                  child: Material(
+                    color: scheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(28),
+                    child: InkWell(
                       borderRadius: BorderRadius.circular(28),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: scheme.primary.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(20),
+                      onTap: item != null
+                          ? () => context.push(AppRoutes.playerPath(item.id))
+                          : null,
+                      child: Container(
+                        width: 130,
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: scheme.primary.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                alignment: Alignment.center,
+                                child: Icon(
+                                  Icons.headphones_rounded,
+                                  color: scheme.primary,
+                                ),
+                              ),
                             ),
-                            alignment: Alignment.center,
-                            child: Icon(
-                              Icons.headphones_rounded,
-                              color: scheme.primary,
+                            const SizedBox(height: 12),
+                            Text(
+                              item?.title ?? 'Your books',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: text.titleMedium,
                             ),
-                          ),
+                            const SizedBox(height: 4),
+                            Text(
+                              item == null
+                                  ? 'Imported titles'
+                                  : '${item.author?.name ?? 'Unknown author'} • ${item.chapterCount} ch',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: text.bodySmall,
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 12),
-                        Text(
-                          item?.title ?? 'Your books',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: text.titleMedium,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          item == null
-                              ? 'Imported titles'
-                              : '${item.author?.name ?? 'Unknown author'} • ${item.chapterCount} ch',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: text.bodySmall,
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 );

@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:avdibook/core/constants/app_constants.dart';
 import 'package:avdibook/core/utils/duration_formatter.dart';
+import 'package:avdibook/core/widgets/expressive_bounce.dart';
 import 'package:avdibook/features/audiobooks/domain/models/audiobook.dart';
 import 'package:avdibook/shared/providers/app_bootstrap_provider.dart';
 import 'package:avdibook/shared/providers/library_provider.dart';
@@ -125,72 +126,74 @@ class _LibraryBookTile extends StatelessWidget {
     return Material(
       color: cs.surfaceContainerLow,
       borderRadius: BorderRadius.circular(20),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: onOpen,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              _BookCover(coverPath: book.coverPath),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      book.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: tt.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      book.author?.name ?? 'Unknown author',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: tt.bodySmall?.copyWith(
-                        color: cs.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        _MetaPill(
-                          icon: Icons.menu_book_rounded,
-                          label: '${book.chapterCount} chapters',
+      child: ExpressiveBounce(
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: onOpen,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                _BookCover(coverPath: book.coverPath),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        book.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: tt.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
                         ),
-                        _MetaPill(
-                          icon: Icons.graphic_eq_rounded,
-                          label:
-                              'Listened ${DurationFormatter.formatHuman(listened)}',
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        book.author?.name ?? 'Unknown author',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: tt.bodySmall?.copyWith(
+                          color: cs.onSurfaceVariant,
                         ),
-                      ],
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _MetaPill(
+                            icon: Icons.menu_book_rounded,
+                            label: '${book.chapterCount} chapters',
+                          ),
+                          _MetaPill(
+                            icon: Icons.graphic_eq_rounded,
+                            label:
+                                'Listened ${DurationFormatter.formatHuman(listened)}',
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                PopupMenuButton<String>(
+                  onSelected: (value) {
+                    if (value == 'open') onOpen();
+                    if (value == 'remove') onRemove();
+                  },
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(
+                      value: 'open',
+                      child: Text('Open player'),
+                    ),
+                    PopupMenuItem(
+                      value: 'remove',
+                      child: Text('Remove from library'),
                     ),
                   ],
                 ),
-              ),
-              PopupMenuButton<String>(
-                onSelected: (value) {
-                  if (value == 'open') onOpen();
-                  if (value == 'remove') onRemove();
-                },
-                itemBuilder: (context) => const [
-                  PopupMenuItem(
-                    value: 'open',
-                    child: Text('Open player'),
-                  ),
-                  PopupMenuItem(
-                    value: 'remove',
-                    child: Text('Remove from library'),
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

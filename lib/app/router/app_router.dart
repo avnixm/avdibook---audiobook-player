@@ -12,6 +12,7 @@ import 'package:avdibook/features/settings/presentation/screens/about_screen.dar
 import 'package:avdibook/features/setup/presentation/screens/setup_screen.dart';
 import 'package:avdibook/features/splash/presentation/screens/splash_screen.dart';
 import 'package:avdibook/features/player/presentation/screens/now_playing_screen.dart';
+import 'package:avdibook/core/widgets/expressive_bounce.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -213,63 +214,68 @@ class _MiniNowPlayingBar extends ConsumerWidget {
         child: Material(
           color: Theme.of(context).colorScheme.surfaceContainerHigh,
           borderRadius: BorderRadius.circular(18),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(18),
-            onTap: () => context.push(AppRoutes.playerPath(currentBook.id)),
-            child: SizedBox(
-              height: 72,
-              child: Row(
-                children: [
-                  const SizedBox(width: 10),
-                  _MiniCover(coverPath: currentBook.coverPath),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          currentBook.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleSmall
-                              ?.copyWith(fontWeight: FontWeight.w700),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          currentBook.author?.name ?? 'Unknown author',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant,
-                              ),
-                        ),
-                        const SizedBox(height: 6),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(999),
-                          child: LinearProgressIndicator(
-                            value: playerState.progress,
-                            minHeight: 3,
+          child: ExpressiveBounce(
+            child: InkWell(
+              borderRadius: BorderRadius.circular(18),
+              onTap: () => context.push(AppRoutes.playerPath(currentBook.id)),
+              child: SizedBox(
+                height: 72,
+                child: Row(
+                  children: [
+                    const SizedBox(width: 10),
+                    _MiniCover(coverPath: currentBook.coverPath),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            currentBook.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w700),
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 2),
+                          Text(
+                            currentBook.author?.name ?? 'Unknown author',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                                ),
+                          ),
+                          const SizedBox(height: 6),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(999),
+                            child: LinearProgressIndicator(
+                              value: playerState.progress,
+                              minHeight: 3,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  IconButton(
-                    onPressed: () =>
-                        ref.read(playerProvider.notifier).togglePlay(),
-                    icon: Icon(
-                      playerState.isPlaying
-                          ? Icons.pause_rounded
-                          : Icons.play_arrow_rounded,
+                    IconButton(
+                      onPressed: () =>
+                          ref.read(playerProvider.notifier).togglePlay(),
+                      icon: Icon(
+                        playerState.isPlaying
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 4),
-                ],
+                    const SizedBox(width: 4),
+                  ],
+                ),
               ),
             ),
           ),
