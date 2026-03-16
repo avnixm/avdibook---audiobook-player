@@ -5,14 +5,77 @@ import 'package:avdibook/core/utils/duration_formatter.dart';
 import 'package:avdibook/features/player/presentation/providers/player_provider.dart';
 import 'package:avdibook/shared/providers/bookmarks_provider.dart';
 
-class BookmarksScreen extends ConsumerWidget {
+class BookmarksScreen extends ConsumerStatefulWidget {
   const BookmarksScreen({super.key, required this.bookId});
 
   final String bookId;
 
   @override
+  ConsumerState<BookmarksScreen> createState() => _BookmarksScreenState();
+}
+
+class _BookmarksScreenState extends ConsumerState<BookmarksScreen> {
+  Future<void> _showEditDialog(Bookmark bookmark) async {
+    final titleCtl = TextEditingController(text: bookmark.label ?? '');
+    final noteCtl = TextEditingController(text: bookmark.note ?? '');
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Edit Bookmark'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleCtl,
+                decoration: const InputDecoration(
+                  labelText: 'Title',
+                  hintText: 'Bookmark title',
+                ),
+                textInputAction: TextInputAction.next,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: noteCtl,
+                maxLines: 3,
+                minLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Note',
+                  hintText: 'Optional note',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (saved == true) {
+      await ref.read(bookmarksProvider.notifier).update(
+            bookmarkId: bookmark.id,
+            label: titleCtl.text,
+            note: noteCtl.text,
+          );
+    }
+
+    titleCtl.dispose();
+    noteCtl.dispose();
+  }
+
+  @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final bookmarks = ref.watch(bookBookmarksProvider(bookId));
+    final bookmarks = ref.watch(bookBookmarksProvider(widget.bookId));
 
     return Scaffold(
       appBar: AppBar(
@@ -23,7 +86,7 @@ class BookmarksScreen extends ConsumerWidget {
               tooltip: 'Clear all',
               onPressed: () => ref
                   .read(bookmarksProvider.notifier)
-                  .clearForBook(bookId),
+                  .clearForBook(widget.bookId),
               icon: const Icon(Icons.delete_sweep_rounded),
             ),
         ],
@@ -64,13 +127,33 @@ class BookmarksScreen extends ConsumerWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                     subtitle: Text(
-                      DurationFormatter.format(position),
+                      item.note == null || item.note!.isEmpty
+                          ? DurationFormatter.format(position)
+                          : '${DurationFormatter.format(position)}\n${item.note}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    trailing: IconButton(
-                      tooltip: 'Delete',
-                      onPressed: () =>
-                          ref.read(bookmarksProvider.notifier).remove(item.id),
-                      icon: const Icon(Icons.close_rounded),
+                    trailing: PopupMenuButton<String>(
+                      onSelected: (value) {
+                        if (value == 'edit') {
+                          _showEditDialog(item);
+                        }
+                        if (value == 'delete') {
+                          ref
+                              .read(bookmarksProvider.notifier)
+                              .remove(item.id);
+                        }
+                      },
+                      itemBuilder: (context) => const [
+                        PopupMenuItem(
+                          value: 'edit',
+                          child: Text('Edit'),
+                        ),
+                        PopupMenuItem(
+                          value: 'delete',
+                          child: Text('Delete'),
+                        ),
+                      ],
                     ),
                   ),
                 );

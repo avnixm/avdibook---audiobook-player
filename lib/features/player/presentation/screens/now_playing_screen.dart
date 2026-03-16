@@ -121,6 +121,85 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     );
   }
 
+  Future<void> _showAddBookmarkSheet({
+    required String bookId,
+    required Duration position,
+  }) async {
+    final titleCtl = TextEditingController(
+      text: 'At ${DurationFormatter.format(position)}',
+    );
+    final noteCtl = TextEditingController();
+
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+            16,
+            10,
+            16,
+            16 + MediaQuery.of(ctx).viewInsets.bottom,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleCtl,
+                decoration: const InputDecoration(
+                  labelText: 'Bookmark title',
+                ),
+                textInputAction: TextInputAction.next,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: noteCtl,
+                minLines: 2,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  labelText: 'Note (optional)',
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(ctx).pop(false),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: () => Navigator.of(ctx).pop(true),
+                      child: const Text('Save'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (saved == true) {
+      await ref.read(bookmarksProvider.notifier).add(
+            bookId: bookId,
+            position: position,
+            label: titleCtl.text,
+            note: noteCtl.text,
+          );
+      if (!mounted) return;
+      context.push(AppRoutes.bookmarksPath(bookId));
+    }
+
+    titleCtl.dispose();
+    noteCtl.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -241,22 +320,10 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                     scheme: scheme,
                     onTap: book == null
                         ? null
-                        : () async {
-                            await ref.read(bookmarksProvider.notifier).add(
-                                  bookId: book.id,
-                                  position: playerState.position,
-                                  label:
-                                      'At ${DurationFormatter.format(playerState.position)}',
-                                );
-                            if (!mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Bookmark added.'),
-                                duration: Duration(milliseconds: 900),
-                              ),
-                            );
-                            context.push(AppRoutes.bookmarksPath(book.id));
-                          },
+                        : () => _showAddBookmarkSheet(
+                              bookId: book.id,
+                              position: playerState.position,
+                            ),
                   ),
                 ],
               ),

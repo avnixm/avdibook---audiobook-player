@@ -13,6 +13,7 @@ class Bookmark {
     required this.positionMs,
     required this.createdAt,
     this.label,
+    this.note,
   });
 
   final String id;
@@ -20,6 +21,23 @@ class Bookmark {
   final int positionMs;
   final DateTime createdAt;
   final String? label;
+  final String? note;
+
+  Bookmark copyWith({
+    String? label,
+    String? note,
+    bool clearLabel = false,
+    bool clearNote = false,
+  }) {
+    return Bookmark(
+      id: id,
+      bookId: bookId,
+      positionMs: positionMs,
+      createdAt: createdAt,
+      label: clearLabel ? null : (label ?? this.label),
+      note: clearNote ? null : (note ?? this.note),
+    );
+  }
 
   Map<String, dynamic> toMap() {
     return {
@@ -28,6 +46,7 @@ class Bookmark {
       'positionMs': positionMs,
       'createdAt': createdAt.toIso8601String(),
       'label': label,
+      'note': note,
     };
   }
 
@@ -39,6 +58,7 @@ class Bookmark {
       createdAt: DateTime.tryParse(map['createdAt'] as String? ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0),
       label: map['label'] as String?,
+      note: map['note'] as String?,
     );
   }
 }
@@ -68,6 +88,7 @@ class BookmarksNotifier extends Notifier<List<Bookmark>> {
     required String bookId,
     required Duration position,
     String? label,
+    String? note,
   }) async {
     final ms = position.inMilliseconds;
     final duplicate = state.where((b) => b.bookId == bookId).any(
@@ -81,7 +102,8 @@ class BookmarksNotifier extends Notifier<List<Bookmark>> {
         bookId: bookId,
         positionMs: ms,
         createdAt: DateTime.now(),
-        label: label,
+        label: _normalize(label),
+        note: _normalize(note),
       ),
       ...state,
     ];
@@ -98,6 +120,32 @@ class BookmarksNotifier extends Notifier<List<Bookmark>> {
   Future<void> clearForBook(String bookId) async {
     state = state.where((b) => b.bookId != bookId).toList();
     await _persist();
+  }
+
+  Future<void> update({
+    required String bookmarkId,
+    String? label,
+    String? note,
+  }) async {
+    final index = state.indexWhere((b) => b.id == bookmarkId);
+    if (index < 0) return;
+
+    final next = [...state];
+    next[index] = next[index].copyWith(
+      label: _normalize(label),
+      note: _normalize(note),
+      clearLabel: _normalize(label) == null,
+      clearNote: _normalize(note) == null,
+    );
+
+    state = next;
+    await _persist();
+  }
+
+  String? _normalize(String? value) {
+    final trimmed = value?.trim();
+    if (trimmed == null || trimmed.isEmpty) return null;
+    return trimmed;
   }
 
   Future<void> _persist() async {
