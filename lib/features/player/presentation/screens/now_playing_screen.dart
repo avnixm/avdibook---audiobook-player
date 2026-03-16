@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:avdibook/app/theme/app_colors.dart';
 import 'package:avdibook/core/constants/app_constants.dart';
@@ -6,6 +8,7 @@ import 'package:avdibook/core/utils/duration_formatter.dart';
 import 'package:avdibook/core/widgets/expressive_bounce.dart';
 import 'package:avdibook/features/player/presentation/providers/cover_palette_provider.dart';
 import 'package:avdibook/features/player/presentation/providers/player_provider.dart';
+import 'package:avdibook/features/player/presentation/providers/sleep_timer_provider.dart';
 import 'package:avdibook/features/audiobooks/domain/models/audiobook.dart';
 import 'package:avdibook/features/audiobooks/domain/models/audiobook_author.dart';
 import 'package:avdibook/features/setup/presentation/providers/setup_controller.dart';
@@ -17,6 +20,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:sensors_plus/sensors_plus.dart';
 
 class NowPlayingScreen extends ConsumerStatefulWidget {
   const NowPlayingScreen({super.key, required this.bookId});
@@ -28,9 +32,13 @@ class NowPlayingScreen extends ConsumerStatefulWidget {
 }
 
 class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
+  StreamSubscription<AccelerometerEvent>? _accelerometerSubscription;
+  DateTime _lastShakeAt = DateTime.fromMillisecondsSinceEpoch(0);
+
   @override
   void initState() {
     super.initState();
+    _startShakeListener();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final library = ref.read(libraryProvider);
       final matching = library.where((b) => b.id == widget.bookId);
@@ -40,6 +48,86 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
         _backfillMetadataIfNeeded(book);
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _accelerometerSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _startShakeListener() {
+    _accelerometerSubscription = accelerometerEvents.listen((event) {
+      final magnitude = math.sqrt(
+        event.x * event.x + event.y * event.y + event.z * event.z,
+      );
+      final now = DateTime.now();
+      if (magnitude < 21) return;
+      if (now.difference(_lastShakeAt) < const Duration(milliseconds: 1300)) {
+        return;
+      }
+      _lastShakeAt = now;
+
+      final timerState = ref.read(sleepTimerProvider);
+      if (!timerState.resumeArmed) return;
+
+      ref.read(sleepTimerProvider.notifier).resumeFromShake();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Playback resumed after shake.')),
+      );
+    });
+  }
+
+  Future<void> _showSleepTimerSheet(SleepTimerState timerState) async {
+    final selected = await showModalBottomSheet<int>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) {
+        return ListView(
+          shrinkWrap: true,
+          children: [
+            const ListTile(
+              title: Text('Sleep timer'),
+              subtitle: Text('Pause automatically after a delay.'),
+            ),
+            for (final mins in AppDefaults.sleepTimerOptions)
+              ListTile(
+                leading: const Icon(Icons.bedtime_rounded),
+                title: Text('$mins minutes'),
+                onTap: () => Navigator.of(ctx).pop(mins),
+              ),
+            if (timerState.remaining != null || timerState.resumeArmed)
+              ListTile(
+                leading: const Icon(Icons.timer_off_rounded),
+                title: const Text('Turn off timer'),
+                onTap: () => Navigator.of(ctx).pop(0),
+              ),
+          ],
+        );
+      },
+    );
+
+    if (selected == null) return;
+    final notifier = ref.read(sleepTimerProvider.notifier);
+    if (selected <= 0) {
+      notifier.cancel();
+      return;
+    }
+    notifier.start(Duration(minutes: selected));
+  }
+
+  String _sleepTimerLabel(SleepTimerState timerState) {
+    if (timerState.resumeArmed) return 'Shake';
+    final remaining = timerState.remaining;
+    if (remaining == null) return 'Sleep';
+
+    if (remaining.inHours >= 1) {
+      final hours = remaining.inHours;
+      final minutes = remaining.inMinutes % 60;
+      return minutes == 0 ? '${hours}h' : '${hours}h ${minutes}m';
+    }
+    return '${remaining.inMinutes}:${(remaining.inSeconds % 60).toString().padLeft(2, '0')}';
   }
 
   Future<void> _backfillMetadataIfNeeded(Audiobook book) async {
@@ -210,6 +298,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     final paletteColor = paletteAsync.value;
     final skipFwd = ref.watch(skipForwardSecsProvider);
     final skipBwd = ref.watch(skipBackwardSecsProvider);
+    final sleepTimer = ref.watch(sleepTimerProvider);
 
     final matching = library.where((b) => b.id == widget.bookId);
     final book = matching.isEmpty ? null : matching.first;
@@ -475,6 +564,19 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                                 .setSpeed(selected);
                           }
                         },
+                      ),
+                    ),
+                    Expanded(
+                      child: _MiniActionButton(
+                        icon: sleepTimer.resumeArmed
+                            ? Icons.vibration_rounded
+                            : Icons.bedtime_rounded,
+                        label: _sleepTimerLabel(sleepTimer),
+                        active: sleepTimer.remaining != null ||
+                            sleepTimer.resumeArmed,
+                        scheme: scheme,
+                        accentColor: accentColor,
+                        onTap: () => _showSleepTimerSheet(sleepTimer),
                       ),
                     ),
                   ],

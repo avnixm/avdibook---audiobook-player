@@ -45,6 +45,7 @@ dependencies:
   device_info_plus: ^12.3.0
   mime: ^2.0.0
   audio_metadata_reader: ^1.4.2
+  sensors_plus: ^6.1.2
 
   # Color extraction from cover art
   palette_generator: ^0.3.3+7
