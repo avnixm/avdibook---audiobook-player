@@ -26,7 +26,7 @@ class SoftIconButton extends StatelessWidget {
         color: scheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(14),
         child: ExpressiveBounce(
-          enabled: onPressed != null,
+          enabled: true,
           child: InkWell(
             onTap: onPressed,
             borderRadius: BorderRadius.circular(14),

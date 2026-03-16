@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:avdibook/core/constants/app_constants.dart';
+import 'package:avdibook/core/widgets/expressive_bounce.dart';
 import 'package:avdibook/features/setup/presentation/providers/setup_controller.dart';
 import 'package:avdibook/shared/providers/app_state_provider.dart';
 
@@ -287,38 +288,44 @@ class _SettingsTile extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
 
-    return ListTile(
-      leading: Icon(icon, size: 22, color: cs.onSurface.withValues(alpha: 0.7)),
-      title: Text(label, style: tt.bodyMedium),
-      subtitle: subtitle != null
-          ? Text(subtitle!,
-              style: tt.bodySmall
-                  ?.copyWith(color: cs.onSurface.withValues(alpha: 0.5)))
-          : null,
-      trailing: value != null
-          ? Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  value!,
-                  style: tt.bodyMedium?.copyWith(
-                    color: cs.onSurface.withValues(alpha: 0.5),
-                  ),
-                ),
-                if (onTap != null) ...[
-                  const SizedBox(width: 4),
-                  Icon(Icons.chevron_right_rounded,
-                      size: 18, color: cs.onSurface.withValues(alpha: 0.35)),
-                ],
-              ],
-            )
-          : (onTap == null
-              ? null
-              : Icon(Icons.chevron_right_rounded,
-                  size: 18, color: cs.onSurface.withValues(alpha: 0.35))),
+    return ExpressiveBounce(
       enabled: onTap != null,
-      onTap: onTap,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+      child: ListTile(
+        leading:
+            Icon(icon, size: 22, color: cs.onSurface.withValues(alpha: 0.7)),
+        title: Text(label, style: tt.bodyMedium),
+        subtitle: subtitle != null
+            ? Text(subtitle!,
+                style: tt.bodySmall
+                    ?.copyWith(color: cs.onSurface.withValues(alpha: 0.5)))
+            : null,
+        trailing: value != null
+            ? Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    value!,
+                    style: tt.bodyMedium?.copyWith(
+                      color: cs.onSurface.withValues(alpha: 0.5),
+                    ),
+                  ),
+                  if (onTap != null) ...[
+                    const SizedBox(width: 4),
+                    Icon(Icons.chevron_right_rounded,
+                        size: 18,
+                        color: cs.onSurface.withValues(alpha: 0.35)),
+                  ],
+                ],
+              )
+            : (onTap == null
+                ? null
+                : Icon(Icons.chevron_right_rounded,
+                    size: 18, color: cs.onSurface.withValues(alpha: 0.35))),
+        enabled: onTap != null,
+        onTap: onTap,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+      ),
     );
   }
 }
