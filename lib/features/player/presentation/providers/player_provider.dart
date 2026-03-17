@@ -6,6 +6,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 import 'package:avdibook/features/audiobooks/domain/models/audiobook.dart';
 import 'package:avdibook/features/player/data/services/media_control_bridge.dart';
+import 'package:avdibook/features/player/data/services/audio_fx_service.dart';
 import 'package:avdibook/shared/providers/app_state_provider.dart';
 import 'package:avdibook/shared/providers/library_provider.dart';
 import 'package:avdibook/shared/providers/listening_analytics_provider.dart';
@@ -121,6 +122,7 @@ class PlayerNotifier extends Notifier<PlayerState> {
   DateTime _lastProgressPersistAt = DateTime.fromMillisecondsSinceEpoch(0);
   DateTime? _lastPausedAt;
   MediaControlBridge? _mediaBridge;
+  AudioFxService? _audioFx;
   StreamSubscription<AudioInterruptionEvent>? _interruptionSub;
   StreamSubscription<void>? _becomingNoisySub;
 
@@ -135,6 +137,7 @@ class PlayerNotifier extends Notifier<PlayerState> {
 
     _player = AudioPlayer();
     _mediaBridge = MediaControlBridge(ref);
+    _audioFx = AudioFxService();
     unawaited(_mediaBridge?.initialize());
     unawaited(_configureAudioSession());
     unawaited(_player.setSpeed(initialSpeed));
@@ -164,7 +167,16 @@ class PlayerNotifier extends Notifier<PlayerState> {
       final baseVolume = ref.read(globalVolumeProvider);
       final boost = ref.read(volumeBoostProvider);
       unawaited(_player.setVolume(_effectiveVolume(baseVolume, boost)));
+      unawaited(_audioFx?.setLoudnessBoost(boost));
       state = state.copyWith(volume: _effectiveVolume(baseVolume, boost));
+    });
+
+    ref.listen<bool>(equalizerEnabledProvider, (_, next) {
+      unawaited(_audioFx?.setEqualizerEnabled(next));
+    });
+
+    ref.listen<int>(equalizerPresetProvider, (_, next) {
+      unawaited(_audioFx?.setEqualizerPreset(next));
     });
 
     _player.positionStream.listen((pos) {
@@ -200,9 +212,14 @@ class PlayerNotifier extends Notifier<PlayerState> {
       state = state.copyWith(volume: v.clamp(0.0, 1.0));
     });
 
+    _player.androidAudioSessionIdStream.listen((sessionId) {
+      unawaited(_audioFx?.setAudioSessionId(sessionId));
+    });
+
     ref.onDispose(() {
       unawaited(_flushListeningDeltaAndPersistProgress());
       unawaited(_mediaBridge?.dispose());
+      unawaited(_audioFx?.setAudioSessionId(null));
       unawaited(_interruptionSub?.cancel());
       unawaited(_becomingNoisySub?.cancel());
       _player.dispose();

@@ -468,3 +468,73 @@ class StereoBalanceNotifier extends Notifier<double> {
 
 final stereoBalanceProvider =
     NotifierProvider<StereoBalanceNotifier, double>(StereoBalanceNotifier.new);
+
+class EqualizerEnabledNotifier extends Notifier<bool> {
+  @override
+  bool build() {
+    final prefs = ref.watch(sharedPreferencesProvider);
+    if (!prefs.containsKey(StorageKeys.equalizerEnabled)) {
+      unawaited(_hydrateFromDriftIfNeeded());
+    }
+    return prefs.getBool(StorageKeys.equalizerEnabled) ??
+        AppDefaults.equalizerEnabled;
+  }
+
+  Future<void> _hydrateFromDriftIfNeeded() async {
+    final fallback = await ref
+        .read(startupStorageServiceProvider)
+        .loadEqualizerEnabledSnapshot();
+    if (fallback == null || !ref.mounted) return;
+
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setBool(StorageKeys.equalizerEnabled, fallback);
+    state = fallback;
+  }
+
+  Future<void> set(bool enabled) async {
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setBool(StorageKeys.equalizerEnabled, enabled);
+    await ref
+        .read(startupStorageServiceProvider)
+        .saveEqualizerEnabledSnapshot(enabled);
+    state = enabled;
+  }
+}
+
+final equalizerEnabledProvider = NotifierProvider<EqualizerEnabledNotifier, bool>(
+  EqualizerEnabledNotifier.new,
+);
+
+class EqualizerPresetNotifier extends Notifier<int> {
+  @override
+  int build() {
+    final prefs = ref.watch(sharedPreferencesProvider);
+    if (!prefs.containsKey(StorageKeys.equalizerPreset)) {
+      unawaited(_hydrateFromDriftIfNeeded());
+    }
+    return prefs.getInt(StorageKeys.equalizerPreset) ?? AppDefaults.equalizerPreset;
+  }
+
+  Future<void> _hydrateFromDriftIfNeeded() async {
+    final fallback =
+        await ref.read(startupStorageServiceProvider).loadEqualizerPresetSnapshot();
+    if (fallback == null || !ref.mounted) return;
+
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setInt(StorageKeys.equalizerPreset, fallback);
+    state = fallback;
+  }
+
+  Future<void> set(int preset) async {
+    final normalized = preset.clamp(0, 32);
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setInt(StorageKeys.equalizerPreset, normalized);
+    await ref
+        .read(startupStorageServiceProvider)
+        .saveEqualizerPresetSnapshot(normalized);
+    state = normalized;
+  }
+}
+
+final equalizerPresetProvider =
+    NotifierProvider<EqualizerPresetNotifier, int>(EqualizerPresetNotifier.new);

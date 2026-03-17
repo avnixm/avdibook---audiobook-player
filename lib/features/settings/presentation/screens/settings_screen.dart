@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:avdibook/core/constants/app_constants.dart';
 import 'package:avdibook/core/widgets/expressive_bounce.dart';
+import 'package:avdibook/features/player/data/services/audio_fx_service.dart';
 import 'package:avdibook/features/setup/presentation/providers/setup_controller.dart';
 import 'package:avdibook/shared/providers/app_state_provider.dart';
 
@@ -18,6 +19,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   static const _skipOptions = [5, 10, 15, 20, 30, 45, 60];
   static const _smartRewindOptions = [0, 3, 5, 7, 10, 15, 20];
   static const _themeLabels = ['System', 'Light', 'Dark'];
+  final AudioFxService _audioFxService = AudioFxService();
 
   Future<void> _pickOption<T>({
     required String title,
@@ -64,6 +66,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final smartRewindSecs = ref.watch(smartRewindSecsProvider);
     final volumeBoost = ref.watch(volumeBoostProvider);
     final stereoBalance = ref.watch(stereoBalanceProvider);
+    final equalizerEnabled = ref.watch(equalizerEnabledProvider);
+    final equalizerPreset = ref.watch(equalizerPresetProvider);
     final reducedMotion = ref.watch(reducedMotionProvider);
     final savedFolder = ref.watch(scanFolderPathProvider);
     final setupState = ref.watch(setupControllerProvider);
@@ -285,9 +289,41 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     const ListTile(
                       leading: Icon(Icons.equalizer_rounded),
                       title: Text('Equalizer'),
-                      subtitle: Text(
-                        'Coming next: native DSP presets and per-band controls.',
-                      ),
+                    ),
+                    SwitchListTile.adaptive(
+                      value: equalizerEnabled,
+                      onChanged: isBusy
+                          ? null
+                          : (value) => ref
+                              .read(equalizerEnabledProvider.notifier)
+                              .set(value),
+                      title: const Text('Enable equalizer'),
+                      subtitle: const Text('Android native EQ presets'),
+                      secondary: const Icon(Icons.graphic_eq_rounded),
+                    ),
+                    _SettingsTile(
+                      icon: Icons.library_music_rounded,
+                      label: 'Equalizer preset',
+                      value: 'Preset #$equalizerPreset',
+                      onTap: isBusy
+                          ? null
+                          : () async {
+                              final presets = await _audioFxService.getEqualizerPresets();
+                              if (!mounted || presets.isEmpty) return;
+                              final options = <int>[];
+                              for (var i = 0; i < presets.length; i++) {
+                                options.add(i);
+                              }
+                              await _pickOption<int>(
+                                title: 'Equalizer preset',
+                                options: options,
+                                current: equalizerPreset.clamp(0, presets.length - 1),
+                                label: (v) => presets[v],
+                                onSelect: (v) => ref
+                                    .read(equalizerPresetProvider.notifier)
+                                    .set(v),
+                              );
+                            },
                     ),
                   ],
                 ),

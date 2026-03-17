@@ -33,6 +33,8 @@ class StartupStorageService {
   static const _kvPlaybackHistoryKey = 'legacy_playback_history_v1';
   static const _kvVolumeBoostKey = 'setting_volume_boost';
   static const _kvStereoBalanceKey = 'setting_stereo_balance';
+  static const _kvEqualizerEnabledKey = 'setting_equalizer_enabled';
+  static const _kvEqualizerPresetKey = 'setting_equalizer_preset';
 
   final SharedPreferences _prefs;
   final AppDatabase _database;
@@ -87,6 +89,8 @@ class StartupStorageService {
       StorageKeys.smartRewindSecs: _prefs.getInt(StorageKeys.smartRewindSecs),
       StorageKeys.volumeBoost: _prefs.getDouble(StorageKeys.volumeBoost),
       StorageKeys.stereoBalance: _prefs.getDouble(StorageKeys.stereoBalance),
+      StorageKeys.equalizerEnabled: _prefs.getBool(StorageKeys.equalizerEnabled),
+      StorageKeys.equalizerPreset: _prefs.getInt(StorageKeys.equalizerPreset),
     };
 
     await _database.putKeyValue(
@@ -162,6 +166,16 @@ class StartupStorageService {
     final stereoBalance = _prefs.getDouble(StorageKeys.stereoBalance);
     if (stereoBalance != null) {
       await saveStereoBalanceSnapshot(stereoBalance);
+    }
+
+    final equalizerEnabled = _prefs.getBool(StorageKeys.equalizerEnabled);
+    if (equalizerEnabled != null) {
+      await saveEqualizerEnabledSnapshot(equalizerEnabled);
+    }
+
+    final equalizerPreset = _prefs.getInt(StorageKeys.equalizerPreset);
+    if (equalizerPreset != null) {
+      await saveEqualizerPresetSnapshot(equalizerPreset);
     }
 
     await _prefs.setBool(_driftMigratedKey, true);
@@ -381,6 +395,33 @@ class StartupStorageService {
   Future<double?> loadStereoBalanceSnapshot() async {
     final raw = await _database.getKeyValue(_kvStereoBalanceKey);
     return raw == null ? null : double.tryParse(raw);
+  }
+
+  Future<void> saveEqualizerEnabledSnapshot(bool enabled) {
+    return _database.putKeyValue(
+      key: _kvEqualizerEnabledKey,
+      value: enabled ? '1' : '0',
+    );
+  }
+
+  Future<bool?> loadEqualizerEnabledSnapshot() async {
+    final raw = await _database.getKeyValue(_kvEqualizerEnabledKey);
+    if (raw == null) return null;
+    if (raw == '1') return true;
+    if (raw == '0') return false;
+    return null;
+  }
+
+  Future<void> saveEqualizerPresetSnapshot(int preset) {
+    return _database.putKeyValue(
+      key: _kvEqualizerPresetKey,
+      value: preset.toString(),
+    );
+  }
+
+  Future<int?> loadEqualizerPresetSnapshot() async {
+    final raw = await _database.getKeyValue(_kvEqualizerPresetKey);
+    return raw == null ? null : int.tryParse(raw);
   }
 
   Future<bool> getOnboardingComplete() async {
