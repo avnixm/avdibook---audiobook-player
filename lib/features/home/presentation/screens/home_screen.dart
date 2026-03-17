@@ -29,6 +29,33 @@ class HomeScreen extends ConsumerWidget {
     final setupState = ref.watch(setupControllerProvider);
     final isBusy = setupState.isBusy;
     final statusCounts = _buildStatusCounts(library, analytics.byBook);
+    final continueListening = library
+        .where((b) => b.progress > 0 && b.progress < 0.98)
+        .toList()
+      ..sort((a, b) {
+        final aPlayed = analytics.byBook[a.id]?.lastPlayedAt ?? a.lastPlayedAt;
+        final bPlayed = analytics.byBook[b.id]?.lastPlayedAt ?? b.lastPlayedAt;
+        if (aPlayed == null && bPlayed == null) return 0;
+        if (aPlayed == null) return 1;
+        if (bPlayed == null) return -1;
+        return bPlayed.compareTo(aPlayed);
+      });
+
+    final recentlyPlayed = library
+        .where((b) =>
+            analytics.byBook[b.id]?.lastPlayedAt != null || b.lastPlayedAt != null)
+        .toList()
+      ..sort((a, b) {
+        final aPlayed = analytics.byBook[a.id]?.lastPlayedAt ?? a.lastPlayedAt;
+        final bPlayed = analytics.byBook[b.id]?.lastPlayedAt ?? b.lastPlayedAt;
+        if (aPlayed == null && bPlayed == null) return 0;
+        if (aPlayed == null) return 1;
+        if (bPlayed == null) return -1;
+        return bPlayed.compareTo(aPlayed);
+      });
+
+    final recentlyAdded = [...library]
+      ..sort((a, b) => b.importedAt.compareTo(a.importedAt));
 
     void importFiles() =>
         ref.read(setupControllerProvider.notifier).importFiles();
@@ -153,6 +180,33 @@ class HomeScreen extends ConsumerWidget {
                     () => context.push(AppRoutes.playerPath(library.first.id)),
               ),
             ),
+            if (continueListening.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              SectionHeader(title: 'Continue Listening'),
+              const SizedBox(height: 8),
+              _BookRail(
+                books: continueListening.take(10).toList(),
+                onTap: (book) => context.push(AppRoutes.playerPath(book.id)),
+              ),
+            ],
+            if (recentlyPlayed.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              SectionHeader(title: 'Recently Played'),
+              const SizedBox(height: 8),
+              _BookRail(
+                books: recentlyPlayed.take(10).toList(),
+                onTap: (book) => context.push(AppRoutes.playerPath(book.id)),
+              ),
+            ],
+            if (recentlyAdded.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              SectionHeader(title: 'Recently Added'),
+              const SizedBox(height: 8),
+              _BookRail(
+                books: recentlyAdded.take(10).toList(),
+                onTap: (book) => context.push(AppRoutes.playerPath(book.id)),
+              ),
+            ],
           ],
           const SizedBox(height: AppSpacing.xxl),
           SectionHeader(

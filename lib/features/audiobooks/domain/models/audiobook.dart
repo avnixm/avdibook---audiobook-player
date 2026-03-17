@@ -41,6 +41,8 @@ class Audiobook extends Equatable {
     this.lastPlayedAt,
     this.status = BookStatus.newBook,
     this.completedAt,
+    this.preferredSpeed,
+    this.isFavorite = false,
   });
 
   final String id;
@@ -60,6 +62,8 @@ class Audiobook extends Equatable {
   final DateTime? lastPlayedAt;
   final BookStatus status;
   final DateTime? completedAt;
+  final double? preferredSpeed;
+  final bool isFavorite;
 
   bool get isSingleFile => sourcePaths.length == 1;
   int get chapterCount => chapters.length;
@@ -93,6 +97,9 @@ class Audiobook extends Equatable {
     BookStatus? status,
     DateTime? completedAt,
     bool clearCompletedAt = false,
+    double? preferredSpeed,
+    bool clearPreferredSpeed = false,
+    bool? isFavorite,
   }) {
     return Audiobook(
       id: id ?? this.id,
@@ -117,6 +124,9 @@ class Audiobook extends Equatable {
         status: status ?? this.status,
         completedAt:
           clearCompletedAt ? null : (completedAt ?? this.completedAt),
+      preferredSpeed:
+          clearPreferredSpeed ? null : (preferredSpeed ?? this.preferredSpeed),
+      isFavorite: isFavorite ?? this.isFavorite,
     );
   }
 
@@ -139,5 +149,7 @@ class Audiobook extends Equatable {
         lastPlayedAt,
         status,
         completedAt,
+        preferredSpeed,
+        isFavorite,
       ];
 }

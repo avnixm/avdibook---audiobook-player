@@ -97,6 +97,15 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                 title: Text('$mins minutes'),
                 onTap: () => Navigator.of(ctx).pop(mins),
               ),
+            ListTile(
+              leading: Icon(
+                timerState.endOfChapterArmed
+                    ? Icons.bookmark_added_rounded
+                    : Icons.bookmark_add_outlined,
+              ),
+              title: const Text('End of current chapter'),
+              onTap: () => Navigator.of(ctx).pop(-2),
+            ),
             if (timerState.remaining != null || timerState.resumeArmed)
               ListTile(
                 leading: const Icon(Icons.timer_off_rounded),
@@ -110,6 +119,10 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
 
     if (selected == null) return;
     final notifier = ref.read(sleepTimerProvider.notifier);
+    if (selected == -2) {
+      notifier.toggleEndOfChapter();
+      return;
+    }
     if (selected <= 0) {
       notifier.cancel();
       return;
@@ -119,6 +132,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
 
   String _sleepTimerLabel(SleepTimerState timerState) {
     if (timerState.resumeArmed) return 'Shake';
+    if (timerState.endOfChapterArmed) return 'EoC';
     final remaining = timerState.remaining;
     if (remaining == null) return 'Sleep';
 
@@ -300,6 +314,23 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     final skipBwd = ref.watch(skipBackwardSecsProvider);
     final sleepTimer = ref.watch(sleepTimerProvider);
 
+    ref.listen<int>(
+      playerProvider.select((s) => s.currentChapterIndex),
+      (previous, next) {
+        if (previous == null || previous == next) return;
+        final timerState = ref.read(sleepTimerProvider);
+        if (!timerState.endOfChapterArmed) return;
+
+        ref.read(playerProvider.notifier).pause();
+        ref.read(sleepTimerProvider.notifier).clearEndOfChapter();
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Paused at chapter end.')),
+        );
+      },
+    );
+
     final matching = library.where((b) => b.id == widget.bookId);
     final book = matching.isEmpty ? null : matching.first;
 
@@ -313,11 +344,11 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     final onAccent =
         accentColor.computeLuminance() > 0.5 ? Colors.black87 : Colors.white;
 
-    final remaining =
-        playerState.duration - playerState.position;
     final positionLabel = DurationFormatter.format(playerState.position);
-    final remainingLabel =
-        '-${DurationFormatter.format(remaining > Duration.zero ? remaining : Duration.zero)}';
+    final chapterRemainingLabel =
+      '-${DurationFormatter.format(playerState.chapterRemaining)}';
+    final bookRemainingLabel =
+      '-${DurationFormatter.format(playerState.bookRemaining)}';
 
     return Scaffold(
       body: SafeArea(
@@ -447,8 +478,40 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                     ),
                     const Spacer(),
                     Text(
-                      remainingLabel,
+                      chapterRemainingLabel,
                       style: text.bodySmall
+                          ?.copyWith(color: AppColors.subtle(context)),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 6),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Row(
+                  children: [
+                    Text(
+                      'Chapter left',
+                      style: text.labelSmall
+                          ?.copyWith(color: AppColors.subtle(context)),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      chapterRemainingLabel,
+                      style: text.labelSmall
+                          ?.copyWith(color: AppColors.subtle(context)),
+                    ),
+                    const Spacer(),
+                    Text(
+                      'Book left',
+                      style: text.labelSmall
+                          ?.copyWith(color: AppColors.subtle(context)),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      bookRemainingLabel,
+                      style: text.labelSmall
                           ?.copyWith(color: AppColors.subtle(context)),
                     ),
                   ],
@@ -587,7 +650,8 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                             : Icons.bedtime_rounded,
                         label: _sleepTimerLabel(sleepTimer),
                         active: sleepTimer.remaining != null ||
-                            sleepTimer.resumeArmed,
+                          sleepTimer.resumeArmed ||
+                          sleepTimer.endOfChapterArmed,
                         scheme: scheme,
                         accentColor: accentColor,
                         onTap: () => _showSleepTimerSheet(sleepTimer),

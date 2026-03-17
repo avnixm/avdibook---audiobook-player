@@ -13,6 +13,21 @@ import 'package:avdibook/shared/providers/library_provider.dart';
 import 'package:avdibook/shared/providers/listening_analytics_provider.dart';
 import 'package:avdibook/shared/providers/storage_providers.dart';
 
+enum LibraryViewFilter {
+  all,
+  continueListening,
+  recentPlayed,
+  favorites,
+}
+
+enum LibrarySortMode {
+  recentAdded,
+  recentPlayed,
+  title,
+  author,
+  progress,
+}
+
 class LibraryScreen extends ConsumerStatefulWidget {
   const LibraryScreen({super.key});
 
@@ -22,6 +37,8 @@ class LibraryScreen extends ConsumerStatefulWidget {
 
 class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   BookStatus? _statusFilter;
+  LibraryViewFilter _viewFilter = LibraryViewFilter.all;
+  LibrarySortMode _sortMode = LibrarySortMode.recentAdded;
 
   @override
   Widget build(BuildContext context) {
@@ -32,8 +49,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     final charactersByBook = ref.watch(characterNotesProvider);
     final analyticsByBook = analytics.byBook;
 
-    final sorted = [...library]
-      ..sort((a, b) => b.importedAt.compareTo(a.importedAt));
+    final sorted = [...library];
 
     final statusCounts = {
       BookStatus.newBook: 0,
@@ -50,7 +66,42 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       if (_statusFilter == null) return true;
       final listened = analyticsByBook[book.id]?.totalDuration ?? Duration.zero;
       return _resolveStatus(book, listened) == _statusFilter;
-    }).toList();
+    }).where((book) {
+      final listened = analyticsByBook[book.id]?.totalDuration ?? Duration.zero;
+      switch (_viewFilter) {
+        case LibraryViewFilter.all:
+          return true;
+        case LibraryViewFilter.continueListening:
+          return (book.progress > 0 && book.progress < 0.98) ||
+              (listened > Duration.zero && book.progress < 0.98);
+        case LibraryViewFilter.recentPlayed:
+          return analyticsByBook[book.id]?.lastPlayedAt != null ||
+              book.lastPlayedAt != null;
+        case LibraryViewFilter.favorites:
+          return book.isFavorite;
+      }
+    }).toList()
+      ..sort((a, b) {
+        switch (_sortMode) {
+          case LibrarySortMode.recentAdded:
+            return b.importedAt.compareTo(a.importedAt);
+          case LibrarySortMode.recentPlayed:
+            final aPlayed = analyticsByBook[a.id]?.lastPlayedAt ?? a.lastPlayedAt;
+            final bPlayed = analyticsByBook[b.id]?.lastPlayedAt ?? b.lastPlayedAt;
+            if (aPlayed == null && bPlayed == null) return 0;
+            if (aPlayed == null) return 1;
+            if (bPlayed == null) return -1;
+            return bPlayed.compareTo(aPlayed);
+          case LibrarySortMode.title:
+            return a.title.toLowerCase().compareTo(b.title.toLowerCase());
+          case LibrarySortMode.author:
+            final aAuthor = (a.author?.name ?? '').toLowerCase();
+            final bAuthor = (b.author?.name ?? '').toLowerCase();
+            return aAuthor.compareTo(bAuthor);
+          case LibrarySortMode.progress:
+            return b.progress.compareTo(a.progress);
+        }
+      });
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -102,6 +153,43 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                       runSpacing: 8,
                       children: [
                         _StatusCounterChip(
+                          icon: Icons.library_books_rounded,
+                          label: 'All',
+                          count: sorted.length,
+                          active: _viewFilter == LibraryViewFilter.all,
+                          onTap: () => setState(() => _viewFilter = LibraryViewFilter.all),
+                        ),
+                        _StatusCounterChip(
+                          icon: Icons.play_circle_outline_rounded,
+                          label: 'Continue',
+                          count: sorted
+                              .where((book) => book.progress > 0 && book.progress < 0.98)
+                              .length,
+                          active: _viewFilter == LibraryViewFilter.continueListening,
+                          onTap: () => setState(() =>
+                              _viewFilter = LibraryViewFilter.continueListening),
+                        ),
+                        _StatusCounterChip(
+                          icon: Icons.history_rounded,
+                          label: 'Recent',
+                          count: sorted
+                              .where((book) =>
+                                  analyticsByBook[book.id]?.lastPlayedAt != null ||
+                                  book.lastPlayedAt != null)
+                              .length,
+                          active: _viewFilter == LibraryViewFilter.recentPlayed,
+                          onTap: () => setState(() =>
+                              _viewFilter = LibraryViewFilter.recentPlayed),
+                        ),
+                        _StatusCounterChip(
+                          icon: Icons.star_rounded,
+                          label: 'Favorites',
+                          count: sorted.where((book) => book.isFavorite).length,
+                          active: _viewFilter == LibraryViewFilter.favorites,
+                          onTap: () =>
+                              setState(() => _viewFilter = LibraryViewFilter.favorites),
+                        ),
+                        _StatusCounterChip(
                           icon: Icons.fiber_new_rounded,
                           label: 'New',
                           count: statusCounts[BookStatus.newBook] ?? 0,
@@ -144,6 +232,55 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                         label: const Text('Clear filter'),
                       ),
                     ],
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Text(
+                          'Sort by',
+                          style: tt.labelMedium?.copyWith(
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        PopupMenuButton<LibrarySortMode>(
+                          initialValue: _sortMode,
+                          onSelected: (value) => setState(() => _sortMode = value),
+                          itemBuilder: (context) => const [
+                            PopupMenuItem(
+                              value: LibrarySortMode.recentAdded,
+                              child: Text('Recently added'),
+                            ),
+                            PopupMenuItem(
+                              value: LibrarySortMode.recentPlayed,
+                              child: Text('Recently played'),
+                            ),
+                            PopupMenuItem(
+                              value: LibrarySortMode.title,
+                              child: Text('Title'),
+                            ),
+                            PopupMenuItem(
+                              value: LibrarySortMode.author,
+                              child: Text('Author'),
+                            ),
+                            PopupMenuItem(
+                              value: LibrarySortMode.progress,
+                              child: Text('Progress'),
+                            ),
+                          ],
+                          child: Chip(
+                            label: Text(
+                              switch (_sortMode) {
+                                LibrarySortMode.recentAdded => 'Recently added',
+                                LibrarySortMode.recentPlayed => 'Recently played',
+                                LibrarySortMode.title => 'Title',
+                                LibrarySortMode.author => 'Author',
+                                LibrarySortMode.progress => 'Progress',
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -178,6 +315,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                               context.push(AppRoutes.playerPath(book.id)),
                           onManageCharacters: () =>
                               _showCharactersSheet(context, ref, book),
+                            onToggleFavorite: () =>
+                              _toggleFavorite(context, ref, book),
                           onRemove: () => _removeBook(context, ref, book),
                         );
                       },
@@ -424,6 +563,22 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       );
     }
   }
+
+  Future<void> _toggleFavorite(
+    BuildContext context,
+    WidgetRef ref,
+    Audiobook book,
+  ) async {
+    final existing = ref.read(libraryProvider);
+    final index = existing.indexWhere((b) => b.id == book.id);
+    if (index < 0) return;
+
+    final next = [...existing];
+    next[index] = next[index].copyWith(isFavorite: !next[index].isFavorite);
+
+    ref.read(libraryProvider.notifier).setLibrary(next);
+    await ref.read(startupStorageServiceProvider).setLibraryItems(next);
+  }
 }
 
 class _LibraryBookTile extends StatelessWidget {
@@ -434,6 +589,7 @@ class _LibraryBookTile extends StatelessWidget {
     required this.characterCount,
     required this.onOpen,
     required this.onManageCharacters,
+    required this.onToggleFavorite,
     required this.onRemove,
   });
 
@@ -443,6 +599,7 @@ class _LibraryBookTile extends StatelessWidget {
   final int characterCount;
   final VoidCallback onOpen;
   final VoidCallback onManageCharacters;
+  final VoidCallback onToggleFavorite;
   final VoidCallback onRemove;
 
   @override
@@ -510,6 +667,11 @@ class _LibraryBookTile extends StatelessWidget {
                               icon: Icons.groups_rounded,
                               label: '$characterCount characters',
                             ),
+                          if (book.isFavorite)
+                            _MetaPill(
+                              icon: Icons.star_rounded,
+                              label: 'Favorite',
+                            ),
                         ],
                       ),
                     ],
@@ -519,9 +681,10 @@ class _LibraryBookTile extends StatelessWidget {
                   onSelected: (value) {
                     if (value == 'open') onOpen();
                     if (value == 'characters') onManageCharacters();
+                    if (value == 'favorite') onToggleFavorite();
                     if (value == 'remove') onRemove();
                   },
-                  itemBuilder: (context) => const [
+                  itemBuilder: (context) => [
                     PopupMenuItem(
                       value: 'open',
                       child: Text('Open player'),
@@ -529,6 +692,12 @@ class _LibraryBookTile extends StatelessWidget {
                     PopupMenuItem(
                       value: 'characters',
                       child: Text('Manage characters'),
+                    ),
+                    PopupMenuItem(
+                      value: 'favorite',
+                      child: Text(book.isFavorite
+                          ? 'Remove from favorites'
+                          : 'Add to favorites'),
                     ),
                     PopupMenuItem(
                       value: 'remove',

@@ -291,6 +291,8 @@ class StartupStorageService {
       'lastPlayedAt': book.lastPlayedAt?.toIso8601String(),
       'status': book.status.name,
       'completedAt': book.completedAt?.toIso8601String(),
+      'preferredSpeed': book.preferredSpeed,
+      'isFavorite': book.isFavorite,
       'chapters': book.chapters
           .map(
             (chapter) => {
@@ -336,6 +338,8 @@ class StartupStorageService {
         completedAt: map['completedAt'] == null
             ? null
             : DateTime.parse(map['completedAt'] as String),
+        preferredSpeed: (map['preferredSpeed'] as num?)?.toDouble(),
+        isFavorite: map['isFavorite'] as bool? ?? false,
         chapters: rawChapters.map((chapterMap) {
           final c = chapterMap as Map<String, dynamic>;
           return AudiobookChapter(

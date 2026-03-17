@@ -21,6 +21,7 @@ dependencies:
 
   # Fonts
   google_fonts: ^8.0.2
+  dynamic_color: ^1.7.0
 
   # Audio playback + background service
   just_audio: ^0.10.5

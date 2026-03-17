@@ -2,12 +2,12 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:avdibook/features/audiobooks/domain/models/audiobook.dart';
+import 'package:avdibook/shared/providers/app_state_provider.dart';
+import 'package:avdibook/shared/providers/library_provider.dart';
+import 'package:avdibook/shared/providers/listening_analytics_provider.dart';
+import 'package:avdibook/shared/providers/storage_providers.dart';
 
-import '../../../../features/audiobooks/domain/models/audiobook.dart';
-import '../../../../shared/providers/app_state_provider.dart';
-import '../../../../shared/providers/library_provider.dart';
-import '../../../../shared/providers/listening_analytics_provider.dart';
-import '../../../../shared/providers/storage_providers.dart';
 
 class PlayerState {
   const PlayerState({
@@ -22,6 +22,10 @@ class PlayerState {
     this.loopMode = LoopMode.off,
     this.volume = 1.0,
     this.previousPosition,
+    this.chapterRemaining = Duration.zero,
+    this.bookRemaining = Duration.zero,
+    this.chapterProgress = 0.0,
+    this.bookProgress = 0.0,
     this.error,
   });
 
@@ -36,6 +40,10 @@ class PlayerState {
   final LoopMode loopMode;
   final double volume;
   final Duration? previousPosition;
+  final Duration chapterRemaining;
+  final Duration bookRemaining;
+  final double chapterProgress;
+  final double bookProgress;
   final String? error;
 
   bool get isLoaded => bookId != null && !isLoading;
@@ -58,6 +66,10 @@ class PlayerState {
     double? volume,
     Duration? previousPosition,
     bool clearPreviousPosition = false,
+    Duration? chapterRemaining,
+    Duration? bookRemaining,
+    double? chapterProgress,
+    double? bookProgress,
     String? error,
     bool clearError = false,
   }) {
@@ -75,6 +87,10 @@ class PlayerState {
       previousPosition: clearPreviousPosition
           ? null
           : (previousPosition ?? this.previousPosition),
+      chapterRemaining: chapterRemaining ?? this.chapterRemaining,
+      bookRemaining: bookRemaining ?? this.bookRemaining,
+      chapterProgress: chapterProgress ?? this.chapterProgress,
+      bookProgress: bookProgress ?? this.bookProgress,
       error: clearError ? null : (error ?? this.error),
     );
   }
@@ -99,11 +115,15 @@ class PlayerNotifier extends Notifier<PlayerState> {
 
     _player.positionStream.listen((pos) {
       state = state.copyWith(position: pos);
+      _refreshDerivedProgress();
       _trackListeningProgress(pos);
     });
 
     _player.durationStream.listen((dur) {
-      if (dur != null) state = state.copyWith(duration: dur);
+      if (dur != null) {
+        state = state.copyWith(duration: dur);
+        _refreshDerivedProgress();
+      }
     });
 
     _player.playerStateStream.listen((ps) {
@@ -115,7 +135,10 @@ class PlayerNotifier extends Notifier<PlayerState> {
     });
 
     _player.currentIndexStream.listen((i) {
-      if (i != null) state = state.copyWith(currentChapterIndex: i);
+      if (i != null) {
+        state = state.copyWith(currentChapterIndex: i);
+        _refreshDerivedProgress();
+      }
     });
 
     _player.volumeStream.listen((v) {
@@ -170,7 +193,8 @@ class PlayerNotifier extends Notifier<PlayerState> {
       }
 
       await _player.setAudioSource(source);
-      await _player.setSpeed(state.speed);
+      final resolvedSpeed = book.preferredSpeed ?? state.speed;
+      await _player.setSpeed(resolvedSpeed);
       await _player.setVolume(state.volume);
       final resumeFrom = book.resumePosition;
       if (resumeFrom != null && resumeFrom > Duration.zero) {
@@ -180,13 +204,62 @@ class PlayerNotifier extends Notifier<PlayerState> {
             : duration;
         await _player.seek(clamped);
       }
-      state = state.copyWith(isLoading: false);
+      state = state.copyWith(isLoading: false, speed: resolvedSpeed);
+      _refreshDerivedProgress();
     } catch (_) {
       state = state.copyWith(
         isLoading: false,
         error: 'Could not load audiobook. Check that the files still exist.',
       );
     }
+  }
+
+  void _refreshDerivedProgress() {
+    final chapterDuration = state.duration;
+    final chapterPosition = state.position;
+    final safeChapterRemaining =
+        chapterDuration > chapterPosition ? chapterDuration - chapterPosition : Duration.zero;
+    final safeChapterProgress = chapterDuration.inMilliseconds <= 0
+        ? 0.0
+        : (chapterPosition.inMilliseconds / chapterDuration.inMilliseconds)
+            .clamp(0.0, 1.0);
+
+    final sequence = _player.sequence;
+    Duration bookRemaining = safeChapterRemaining;
+    double bookProgress = safeChapterProgress;
+
+    if (sequence.isNotEmpty) {
+      var allDurationsKnown = true;
+      var totalMs = 0;
+      for (final source in sequence) {
+        final duration = source.duration;
+        if (duration == null) {
+          allDurationsKnown = false;
+          break;
+        }
+        totalMs += duration.inMilliseconds;
+      }
+
+      if (allDurationsKnown && totalMs > 0) {
+        final currentIndex = state.currentChapterIndex.clamp(0, sequence.length - 1);
+        var elapsedMs = chapterPosition.inMilliseconds;
+
+        for (var i = 0; i < currentIndex; i++) {
+          elapsedMs += sequence[i].duration!.inMilliseconds;
+        }
+
+        final remainingMs = (totalMs - elapsedMs).clamp(0, totalMs);
+        bookRemaining = Duration(milliseconds: remainingMs);
+        bookProgress = (elapsedMs / totalMs).clamp(0.0, 1.0);
+      }
+    }
+
+    state = state.copyWith(
+      chapterRemaining: safeChapterRemaining,
+      bookRemaining: bookRemaining,
+      chapterProgress: safeChapterProgress,
+      bookProgress: bookProgress,
+    );
   }
 
   void togglePlay() {
@@ -249,6 +322,23 @@ class PlayerNotifier extends Notifier<PlayerState> {
     await _player.setSpeed(speed);
     state = state.copyWith(speed: speed);
     await ref.read(globalPlaybackSpeedProvider.notifier).set(speed);
+
+    final bookId = state.bookId;
+    if (bookId == null) return;
+
+    final library = ref.read(libraryProvider);
+    final index = library.indexWhere((book) => book.id == bookId);
+    if (index < 0) return;
+
+    final currentBook = library[index];
+    if (currentBook.preferredSpeed == speed) return;
+
+    final updatedBook = currentBook.copyWith(preferredSpeed: speed);
+    final nextLibrary = [...library];
+    nextLibrary[index] = updatedBook;
+
+    ref.read(libraryProvider.notifier).setLibrary(nextLibrary);
+    await ref.read(startupStorageServiceProvider).setLibraryItems(nextLibrary);
   }
 
   Future<void> setVolume(double volume) async {

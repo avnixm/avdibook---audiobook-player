@@ -17,8 +17,8 @@ class AppTheme {
 
   // ─── Light theme ──────────────────────────────────────────────────────────
 
-  static ThemeData get light {
-    final cs = ColorScheme.fromSeed(
+  static ThemeData light([ColorScheme? dynamicScheme]) {
+    final cs = dynamicScheme ?? ColorScheme.fromSeed(
       seedColor: _seedColor,
       brightness: Brightness.light,
       surface: AppColors.surfaceLight,
@@ -30,8 +30,8 @@ class AppTheme {
 
   // ─── Dark theme ────────────────────────────────────────────────────────────
 
-  static ThemeData get dark {
-    final cs = ColorScheme.fromSeed(
+  static ThemeData dark([ColorScheme? dynamicScheme]) {
+    final cs = dynamicScheme ?? ColorScheme.fromSeed(
       seedColor: _seedColor,
       brightness: Brightness.dark,
       surface: AppColors.surfaceDark,
@@ -53,14 +53,12 @@ class AppTheme {
       textTheme: AppTypography.textTheme(cs),
 
       // Scaffold
-      scaffoldBackgroundColor: isLight
-          ? AppColors.backgroundLight
-          : AppColors.backgroundDark,
+        scaffoldBackgroundColor: cs.surface,
 
       // App bar
       appBarTheme: AppBarTheme(
         backgroundColor:
-            isLight ? AppColors.backgroundLight : AppColors.backgroundDark,
+          cs.surface,
         elevation: 0,
         scrolledUnderElevation: 1,
         titleTextStyle: AppTypography.textTheme(cs).titleLarge?.copyWith(
@@ -90,7 +88,7 @@ class AppTheme {
       // Bottom navigation
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor:
-            isLight ? AppColors.navBarLight : AppColors.navBarDark,
+          cs.surfaceContainer,
         elevation: 0,
         indicatorColor: cs.primaryContainer,
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
@@ -132,9 +130,9 @@ class AppTheme {
       // Bottom sheets (chapter list, sleep timer)
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor:
-            isLight ? AppColors.sheetLight : AppColors.sheetDark,
+          cs.surfaceContainerHigh,
         modalBackgroundColor:
-            isLight ? AppColors.sheetLight : AppColors.sheetDark,
+          cs.surfaceContainerHigh,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
         ),
@@ -147,7 +145,7 @@ class AppTheme {
           borderRadius: BorderRadius.circular(28),
         ),
         backgroundColor:
-            isLight ? AppColors.sheetLight : AppColors.sheetDark,
+          cs.surfaceContainerHigh,
       ),
 
       // Input fields
@@ -159,7 +157,7 @@ class AppTheme {
           borderSide: BorderSide.none,
         ),
         filled: true,
-        fillColor: isLight ? AppColors.cardLight : AppColors.cardDark,
+        fillColor: cs.surfaceContainerHighest,
       ),
 
       // Dividers
