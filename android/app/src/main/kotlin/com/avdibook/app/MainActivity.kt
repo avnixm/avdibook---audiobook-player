@@ -9,6 +9,7 @@ import com.ryanheise.audioservice.AudioServiceActivity
 
 class MainActivity : AudioServiceActivity() {
 	private val channelName = "avdibook/audio_fx"
+	private val castChannelName = "avdibook/chromecast"
 	private var audioSessionId: Int? = null
 	private var equalizer: Equalizer? = null
 	private var loudnessEnhancer: LoudnessEnhancer? = null
@@ -85,6 +86,26 @@ class MainActivity : AudioServiceActivity() {
 					}
 				} catch (_: Throwable) {
 					result.success(null)
+				}
+			}
+
+		MethodChannel(flutterEngine.dartExecutor.binaryMessenger, castChannelName)
+			.setMethodCallHandler { call, result ->
+				when (call.method) {
+					"discoverDevices" -> {
+						// Foundation stub: real Cast SDK discovery is added in next pass.
+						result.success(listOf<Map<String, String>>())
+					}
+
+					"connect" -> {
+						result.success(false)
+					}
+
+					"disconnect" -> {
+						result.success(null)
+					}
+
+					else -> result.notImplemented()
 				}
 			}
 	}
