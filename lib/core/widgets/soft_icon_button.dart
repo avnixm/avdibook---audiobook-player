@@ -19,27 +19,16 @@ class SoftIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Tooltip(
       message: tooltip ?? '',
-      child: Material(
-        color: scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(14),
-        child: ExpressiveBounce(
-          enabled: true,
-          child: InkWell(
-            onTap: onPressed,
-            borderRadius: BorderRadius.circular(14),
-            child: SizedBox(
-              width: size,
-              height: size,
-              child: Icon(
-                icon,
-                size: 22,
-                color: scheme.onSurfaceVariant,
-              ),
-            ),
+      child: ExpressiveBounce(
+        enabled: true,
+        child: IconButton.filledTonal(
+          onPressed: onPressed,
+          style: IconButton.styleFrom(
+            minimumSize: Size(size, size),
           ),
+          icon: Icon(icon, size: 22),
         ),
       ),
     );

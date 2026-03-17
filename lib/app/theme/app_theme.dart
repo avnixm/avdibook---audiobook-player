@@ -18,12 +18,14 @@ class AppTheme {
   // ─── Light theme ──────────────────────────────────────────────────────────
 
   static ThemeData light([ColorScheme? dynamicScheme]) {
-    final cs = dynamicScheme ?? ColorScheme.fromSeed(
-      seedColor: _seedColor,
-      brightness: Brightness.light,
-      surface: AppColors.surfaceLight,
-      onSurface: AppColors.onSurfaceLight,
-    );
+    final cs =
+        dynamicScheme ??
+        ColorScheme.fromSeed(
+          seedColor: _seedColor,
+          brightness: Brightness.light,
+          surface: AppColors.surfaceLight,
+          onSurface: AppColors.onSurfaceLight,
+        );
 
     return _build(cs, Brightness.light);
   }
@@ -31,12 +33,14 @@ class AppTheme {
   // ─── Dark theme ────────────────────────────────────────────────────────────
 
   static ThemeData dark([ColorScheme? dynamicScheme]) {
-    final cs = dynamicScheme ?? ColorScheme.fromSeed(
-      seedColor: _seedColor,
-      brightness: Brightness.dark,
-      surface: AppColors.surfaceDark,
-      onSurface: AppColors.onSurfaceDark,
-    );
+    final cs =
+        dynamicScheme ??
+        ColorScheme.fromSeed(
+          seedColor: _seedColor,
+          brightness: Brightness.dark,
+          surface: AppColors.surfaceDark,
+          onSurface: AppColors.onSurfaceDark,
+        );
 
     return _build(cs, Brightness.dark);
   }
@@ -53,18 +57,17 @@ class AppTheme {
       textTheme: AppTypography.textTheme(cs),
 
       // Scaffold
-        scaffoldBackgroundColor: cs.surface,
+      scaffoldBackgroundColor: cs.surface,
 
       // App bar
       appBarTheme: AppBarTheme(
-        backgroundColor:
-          cs.surface,
+        backgroundColor: cs.surface,
         elevation: 0,
-        scrolledUnderElevation: 1,
+        scrolledUnderElevation: 0,
         titleTextStyle: AppTypography.textTheme(cs).titleLarge?.copyWith(
-              fontWeight: FontWeight.w600,
-              letterSpacing: -0.2,
-            ),
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.2,
+        ),
         iconTheme: IconThemeData(color: cs.onSurface),
       ),
 
@@ -72,23 +75,19 @@ class AppTheme {
       cardTheme: CardThemeData(
         elevation: 0,
         margin: EdgeInsets.zero,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        color: isLight ? AppColors.cardLight : AppColors.cardDark,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        color: cs.surfaceContainerLow,
       ),
 
       // Chips
       chipTheme: ChipThemeData(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(50),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(50)),
       ),
 
       // Bottom navigation
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor:
-          cs.surfaceContainer,
+        backgroundColor: cs.surfaceContainer,
         elevation: 0,
         indicatorColor: cs.primaryContainer,
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
@@ -99,6 +98,36 @@ class AppTheme {
             fontFamily: 'Inter',
           );
         }),
+      ),
+
+      navigationRailTheme: NavigationRailThemeData(
+        backgroundColor: cs.surfaceContainerLow,
+        indicatorColor: cs.secondaryContainer,
+        elevation: 0,
+        selectedIconTheme: IconThemeData(color: cs.onSecondaryContainer),
+        unselectedIconTheme: IconThemeData(color: cs.onSurfaceVariant),
+        selectedLabelTextStyle: TextStyle(
+          color: cs.onSurface,
+          fontWeight: FontWeight.w600,
+          fontFamily: 'Inter',
+        ),
+        unselectedLabelTextStyle: TextStyle(
+          color: cs.onSurfaceVariant,
+          fontWeight: FontWeight.w500,
+          fontFamily: 'Inter',
+        ),
+      ),
+
+      searchBarTheme: SearchBarThemeData(
+        backgroundColor: WidgetStatePropertyAll(cs.surfaceContainerHighest),
+        shadowColor: const WidgetStatePropertyAll(Colors.transparent),
+        elevation: const WidgetStatePropertyAll(0),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        ),
+        hintStyle: WidgetStatePropertyAll(
+          TextStyle(color: cs.onSurfaceVariant),
+        ),
       ),
 
       // Sliders (chapter progress, volume)
@@ -112,46 +141,41 @@ class AppTheme {
 
       // Pills / icon buttons
       iconButtonTheme: IconButtonThemeData(
-        style: IconButton.styleFrom(
-          minimumSize: const Size(48, 48),
-        ),
+        style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
       ),
 
       // Floating action button (mini player promote)
       floatingActionButtonTheme: FloatingActionButtonThemeData(
-        backgroundColor: cs.primaryContainer,
-        foregroundColor: cs.onPrimaryContainer,
+        backgroundColor: cs.primary,
+        foregroundColor: cs.onPrimary,
         elevation: 4,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       ),
 
       // Bottom sheets (chapter list, sleep timer)
       bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor:
-          cs.surfaceContainerHigh,
-        modalBackgroundColor:
-          cs.surfaceContainerHigh,
+        backgroundColor: cs.surfaceContainerHigh,
+        modalBackgroundColor: cs.surfaceContainerHigh,
+        dragHandleColor: cs.onSurfaceVariant.withValues(alpha: 0.45),
+        showDragHandle: true,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
         ),
-        elevation: 8,
+        elevation: 1,
       ),
 
       // Dialogs
       dialogTheme: DialogThemeData(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(28),
-        ),
-        backgroundColor:
-          cs.surfaceContainerHigh,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        backgroundColor: cs.surfaceContainerHigh,
       ),
 
       // Input fields
       inputDecorationTheme: InputDecorationTheme(
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide.none,
@@ -170,9 +194,7 @@ class AppTheme {
       // Snack bars
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         backgroundColor: isLight ? AppColors.surfaceDark : AppColors.cardLight,
         contentTextStyle: TextStyle(
           color: isLight ? AppColors.onSurfaceDark : AppColors.onSurfaceLight,

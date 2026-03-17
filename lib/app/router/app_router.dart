@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:collection/collection.dart';
+import 'package:avdibook/app/theme/app_spacing.dart';
 import 'package:avdibook/core/constants/app_constants.dart';
 import 'package:avdibook/features/home/presentation/screens/home_screen.dart';
 import 'package:avdibook/features/library/presentation/screens/library_screen.dart';
@@ -19,7 +20,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../shared/providers/library_provider.dart';
+import 'package:avdibook/shared/providers/library_provider.dart';
 
 class AppRouter {
   static final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -107,7 +108,7 @@ class AppRouter {
       ShellRoute(
         navigatorKey: _shellNavigatorKey,
         builder: (context, state, child) =>
-            _MainShell(child: child, currentPath: state.uri.path),
+            _MainShell(currentPath: state.uri.path, child: child),
         routes: [
           GoRoute(
             path: AppRoutes.home,
@@ -142,12 +143,53 @@ class _MainShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isPlayerRoute = currentPath.startsWith('/player/');
+    final width = MediaQuery.sizeOf(context).width;
+    final useRail = width >= AppSpacing.compactMaxWidth;
+    final useExtendedRail = width >= 1100;
+
+    if (isPlayerRoute) {
+      return Scaffold(body: child);
+    }
+
+    if (useRail) {
+      return Scaffold(
+        body: SafeArea(
+          top: false,
+          child: Row(
+            children: [
+              _AvdiNavigationRail(
+                currentPath: currentPath,
+                extended: useExtendedRail,
+              ),
+              Expanded(
+                child: Column(
+                  children: [
+                    Expanded(child: child),
+                    const SafeArea(
+                      top: false,
+                      left: false,
+                      right: false,
+                      child: _MiniNowPlayingBar(hidden: false),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       body: Column(
         children: [
           Expanded(child: child),
-          _MiniNowPlayingBar(hidden: isPlayerRoute),
+          const SafeArea(
+            top: false,
+            left: false,
+            right: false,
+            child: _MiniNowPlayingBar(hidden: false),
+          ),
         ],
       ),
       bottomNavigationBar: _AvdiBottomNav(currentPath: currentPath),
@@ -160,28 +202,9 @@ class _AvdiBottomNav extends StatelessWidget {
 
   final String currentPath;
 
-  static const _tabs = [
-    (icon: Icons.home_rounded, label: 'Home', route: AppRoutes.home),
-    (
-      icon: Icons.library_books_rounded,
-      label: 'Library',
-      route: AppRoutes.library,
-    ),
-    (
-      icon: Icons.search_rounded,
-      label: 'Search',
-      route: AppRoutes.search,
-    ),
-    (
-      icon: Icons.settings_rounded,
-      label: 'Settings',
-      route: AppRoutes.settings,
-    ),
-  ];
-
   int _currentIndex() {
-    for (var i = 0; i < _tabs.length; i++) {
-      if (currentPath.startsWith(_tabs[i].route)) return i;
+    for (var i = 0; i < _mainTabs.length; i++) {
+      if (currentPath.startsWith(_mainTabs[i].route)) return i;
     }
     return 0;
   }
@@ -191,17 +214,83 @@ class _AvdiBottomNav extends StatelessWidget {
     final current = _currentIndex();
     return NavigationBar(
       selectedIndex: current,
-      onDestinationSelected: (i) => context.go(_tabs[i].route),
+      onDestinationSelected: (i) => context.go(_mainTabs[i].route),
       destinations: [
-        for (final tab in _tabs)
-          NavigationDestination(
-            icon: Icon(tab.icon),
-            label: tab.label,
-          ),
+        for (final tab in _mainTabs)
+          NavigationDestination(icon: Icon(tab.icon), label: tab.label),
       ],
     );
   }
 }
+
+class _AvdiNavigationRail extends StatelessWidget {
+  const _AvdiNavigationRail({
+    required this.currentPath,
+    required this.extended,
+  });
+
+  final String currentPath;
+  final bool extended;
+
+  int _currentIndex() {
+    for (var i = 0; i < _mainTabs.length; i++) {
+      if (currentPath.startsWith(_mainTabs[i].route)) return i;
+    }
+    return 0;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final current = _currentIndex();
+    final theme = Theme.of(context);
+
+    return Container(
+      width: extended
+          ? AppSpacing.navRailExtendedWidth
+          : AppSpacing.navRailWidth,
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
+        border: Border(
+          right: BorderSide(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+          ),
+        ),
+      ),
+      child: SafeArea(
+        right: false,
+        child: NavigationRail(
+          selectedIndex: current,
+          extended: extended,
+          minWidth: AppSpacing.navRailWidth,
+          minExtendedWidth: AppSpacing.navRailExtendedWidth,
+          labelType: extended
+              ? NavigationRailLabelType.none
+              : NavigationRailLabelType.all,
+          onDestinationSelected: (i) => context.go(_mainTabs[i].route),
+          destinations: [
+            for (final tab in _mainTabs)
+              NavigationRailDestination(
+                icon: Icon(tab.icon),
+                selectedIcon: Icon(tab.icon),
+                label: Text(tab.label),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+const _mainTabs = [
+  (icon: Icons.home_rounded, label: 'Home', route: AppRoutes.home),
+  (
+    icon: Icons.library_books_rounded,
+    label: 'Library',
+    route: AppRoutes.library,
+  ),
+  (icon: Icons.search_rounded, label: 'Search', route: AppRoutes.search),
+  (icon: Icons.settings_rounded, label: 'Settings', route: AppRoutes.settings),
+];
 
 class _MiniNowPlayingBar extends ConsumerWidget {
   const _MiniNowPlayingBar({required this.hidden});
@@ -215,17 +304,15 @@ class _MiniNowPlayingBar extends ConsumerWidget {
     final bookId = playerState.bookId;
 
     final book = bookId == null
-      ? null
-      : library.firstWhereOrNull((b) => b.id == bookId);
+        ? null
+        : library.firstWhereOrNull((b) => b.id == bookId);
     final canShow = !hidden && book != null;
 
     final Widget content;
     if (!canShow) {
-      content = const SizedBox(
-        key: ValueKey('mini_now_playing_hidden'),
-      );
+      content = const SizedBox(key: ValueKey('mini_now_playing_hidden'));
     } else {
-      final currentBook = book!;
+      final currentBook = book;
       content = Padding(
         key: const ValueKey('mini_now_playing_visible'),
         padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
@@ -252,9 +339,7 @@ class _MiniNowPlayingBar extends ConsumerWidget {
                             currentBook.title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleSmall
+                            style: Theme.of(context).textTheme.titleSmall
                                 ?.copyWith(fontWeight: FontWeight.w700),
                           ),
                           const SizedBox(height: 2),
@@ -262,13 +347,11 @@ class _MiniNowPlayingBar extends ConsumerWidget {
                             currentBook.author?.name ?? 'Unknown author',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
+                            style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
                                 ),
                           ),
                           const SizedBox(height: 6),
@@ -328,7 +411,8 @@ class _MiniCover extends StatelessWidget {
             ? Image.file(
                 File(imagePath),
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => _MiniCoverFallback(),
+                errorBuilder: (context, error, stackTrace) =>
+                    _MiniCoverFallback(),
               )
             : Container(
                 color: Theme.of(context).colorScheme.surfaceContainerHighest,

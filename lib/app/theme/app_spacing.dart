@@ -13,4 +13,12 @@ abstract class AppSpacing {
 
   /// Card / container inner padding
   static const double cardPad = 20.0;
+
+  /// Adaptive layout breakpoints aligned with Material guidance.
+  static const double compactMaxWidth = 600.0;
+  static const double mediumMaxWidth = 840.0;
+
+  /// Persistent nav rail widths.
+  static const double navRailWidth = 80.0;
+  static const double navRailExtendedWidth = 256.0;
 }

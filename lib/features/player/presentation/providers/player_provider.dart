@@ -138,7 +138,11 @@ class PlayerNotifier extends Notifier<PlayerState> {
     _player = AudioPlayer();
     _mediaBridge = MediaControlBridge(ref);
     _audioFx = AudioFxService();
-    unawaited(_mediaBridge?.initialize());
+    unawaited(
+      _mediaBridge?.initialize(
+        onPlayFromMediaId: _playFromBridgeMediaId,
+      ),
+    );
     unawaited(_configureAudioSession());
     unawaited(_player.setSpeed(initialSpeed));
     unawaited(_player.setVolume(_effectiveVolume(initialVolume, initialVolumeBoost)));
@@ -662,6 +666,54 @@ class PlayerNotifier extends Notifier<PlayerState> {
     nextLibrary[index] = updatedBook;
     ref.read(libraryProvider.notifier).setLibrary(nextLibrary);
     await ref.read(startupStorageServiceProvider).setLibraryItems(nextLibrary);
+  }
+
+  Future<void> _playFromBridgeMediaId(String mediaId) async {
+    final bridge = _mediaBridge;
+    if (bridge == null) return;
+
+    final chapterTarget = bridge.parseChapterMediaId(mediaId);
+    if (chapterTarget != null) {
+      final library = ref.read(libraryProvider);
+      Audiobook? book;
+      for (final item in library) {
+        if (item.id == chapterTarget.bookId) {
+          book = item;
+          break;
+        }
+      }
+      if (book == null) return;
+
+      if (state.bookId != book.id) {
+        await load(book);
+      }
+
+      final chapterCount = book.chapters.length;
+      if (chapterCount > 0) {
+        final index = chapterTarget.chapterIndex.clamp(0, chapterCount - 1);
+        await seekToChapterIndex(index);
+      }
+      play();
+      return;
+    }
+
+    if (mediaId.startsWith('book:')) {
+      final bookId = mediaId.substring('book:'.length);
+      final library = ref.read(libraryProvider);
+      Audiobook? book;
+      for (final item in library) {
+        if (item.id == bookId) {
+          book = item;
+          break;
+        }
+      }
+      if (book == null) return;
+
+      if (state.bookId != book.id) {
+        await load(book);
+      }
+      play();
+    }
   }
 }
 

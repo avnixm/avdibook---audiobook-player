@@ -3,17 +3,16 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:avdibook/app/theme/app_colors.dart';
+import 'package:avdibook/app/theme/app_spacing.dart';
 import 'package:avdibook/core/constants/app_constants.dart';
 import 'package:avdibook/core/utils/duration_formatter.dart';
 import 'package:avdibook/core/widgets/expressive_bounce.dart';
 import 'package:avdibook/features/player/presentation/providers/cover_palette_provider.dart';
-import 'package:avdibook/features/player/presentation/providers/cast_session_provider.dart';
 import 'package:avdibook/features/player/presentation/providers/player_provider.dart';
 import 'package:avdibook/features/player/presentation/providers/sleep_timer_provider.dart';
 import 'package:avdibook/features/audiobooks/domain/models/audiobook.dart';
 import 'package:avdibook/features/audiobooks/domain/models/audiobook_author.dart';
 import 'package:avdibook/features/setup/presentation/providers/setup_controller.dart';
-import 'package:avdibook/shared/providers/app_state_provider.dart';
 import 'package:avdibook/shared/providers/bookmarks_provider.dart';
 import 'package:avdibook/shared/providers/library_provider.dart';
 import 'package:avdibook/shared/providers/storage_providers.dart';
@@ -40,15 +39,13 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   void initState() {
     super.initState();
     _startShakeListener();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final library = ref.read(libraryProvider);
-      final matching = library.where((b) => b.id == widget.bookId);
-      if (matching.isNotEmpty) {
-        final book = matching.first;
-        ref.read(playerProvider.notifier).load(book);
-        _backfillMetadataIfNeeded(book);
-      }
-    });
+    final library = ref.read(libraryProvider);
+    final matching = library.where((b) => b.id == widget.bookId);
+    if (matching.isNotEmpty) {
+      final book = matching.first;
+      ref.read(playerProvider.notifier).load(book);
+      unawaited(_backfillMetadataIfNeeded(book));
+    }
   }
 
   @override
@@ -198,8 +195,8 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                         temp == 0
                             ? Icons.volume_off_rounded
                             : temp < 0.5
-                                ? Icons.volume_down_rounded
-                                : Icons.volume_up_rounded,
+                            ? Icons.volume_down_rounded
+                            : Icons.volume_up_rounded,
                       ),
                       const SizedBox(width: 10),
                       Expanded(
@@ -250,9 +247,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
             children: [
               TextField(
                 controller: titleCtl,
-                decoration: const InputDecoration(
-                  labelText: 'Bookmark title',
-                ),
+                decoration: const InputDecoration(labelText: 'Bookmark title'),
                 textInputAction: TextInputAction.next,
               ),
               const SizedBox(height: 12),
@@ -260,9 +255,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                 controller: noteCtl,
                 minLines: 2,
                 maxLines: 4,
-                decoration: const InputDecoration(
-                  labelText: 'Note (optional)',
-                ),
+                decoration: const InputDecoration(labelText: 'Note (optional)'),
               ),
               const SizedBox(height: 14),
               Row(
@@ -289,7 +282,9 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     );
 
     if (saved == true) {
-      await ref.read(bookmarksProvider.notifier).add(
+      await ref
+          .read(bookmarksProvider.notifier)
+          .add(
             bookId: bookId,
             position: position,
             label: titleCtl.text,
@@ -311,12 +306,13 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     final start = position - const Duration(seconds: 15);
     final boundedStart = start < Duration.zero ? Duration.zero : start;
     final end = position + const Duration(seconds: 15);
-    final boundedEnd =
-        chapterDuration > Duration.zero && end > chapterDuration
-            ? chapterDuration
-            : end;
+    final boundedEnd = chapterDuration > Duration.zero && end > chapterDuration
+        ? chapterDuration
+        : end;
 
-    await ref.read(bookmarksProvider.notifier).addClip(
+    await ref
+        .read(bookmarksProvider.notifier)
+        .addClip(
           bookId: bookId,
           start: boundedStart,
           end: boundedEnd,
@@ -325,9 +321,21 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
         );
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Clip saved to bookmarks.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Clip saved to bookmarks.')));
+  }
+
+  Future<void> _toggleFavoriteForBook(Audiobook book) async {
+    final library = ref.read(libraryProvider);
+    final index = library.indexWhere((b) => b.id == book.id);
+    if (index < 0) return;
+
+    final next = [...library];
+    next[index] = next[index].copyWith(isFavorite: !next[index].isFavorite);
+
+    ref.read(libraryProvider.notifier).setLibrary(next);
+    await ref.read(startupStorageServiceProvider).setLibraryItems(next);
   }
 
   @override
@@ -338,379 +346,325 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     final playerState = ref.watch(playerProvider);
     final paletteAsync = ref.watch(coverPaletteProvider(widget.bookId));
     final paletteColor = paletteAsync.value;
-    final skipFwd = ref.watch(skipForwardSecsProvider);
-    final skipBwd = ref.watch(skipBackwardSecsProvider);
     final sleepTimer = ref.watch(sleepTimerProvider);
-    final castState = ref.watch(castSessionProvider);
 
-    ref.listen<int>(
-      playerProvider.select((s) => s.currentChapterIndex),
-      (previous, next) {
-        if (previous == null || previous == next) return;
-        final timerState = ref.read(sleepTimerProvider);
-        if (!timerState.endOfChapterArmed) return;
+    ref.listen<int>(playerProvider.select((s) => s.currentChapterIndex), (
+      previous,
+      next,
+    ) {
+      if (previous == null || previous == next) return;
+      final timerState = ref.read(sleepTimerProvider);
+      if (!timerState.endOfChapterArmed) return;
 
-        ref.read(playerProvider.notifier).pause();
-        ref.read(sleepTimerProvider.notifier).clearEndOfChapter();
+      ref.read(playerProvider.notifier).pause();
+      ref.read(sleepTimerProvider.notifier).clearEndOfChapter();
 
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Paused at chapter end.')),
-        );
-      },
-    );
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Paused at chapter end.')));
+    });
 
     final matching = library.where((b) => b.id == widget.bookId);
     final book = matching.isEmpty ? null : matching.first;
+    final useCompanionPane =
+        MediaQuery.sizeOf(context).width >= AppSpacing.mediumMaxWidth;
+    final bookmarks = book == null
+        ? const <Bookmark>[]
+        : ref.watch(bookBookmarksProvider(book.id));
 
     final title = book?.title ?? 'Now Playing';
     final author = book?.author?.name ?? 'Unknown author';
-    final chapterLabel = book == null
-        ? 'No chapters imported'
-        : '${book.chapterCount} chapter(s) • ${book.primaryFormat.toUpperCase()}';
-
-    final accentColor = paletteColor ?? scheme.primary;
-    final onAccent =
-        accentColor.computeLuminance() > 0.5 ? Colors.black87 : Colors.white;
+    final targetAccentColor = paletteColor ?? scheme.primary;
+    final accentColor = Color.lerp(
+          scheme.primary,
+          targetAccentColor,
+          paletteAsync.isLoading ? 0.45 : 1,
+        ) ??
+        targetAccentColor;
+    final onAccent = accentColor.computeLuminance() > 0.5
+        ? Colors.black87
+        : Colors.white;
 
     final positionLabel = DurationFormatter.format(playerState.position);
-    final chapterRemainingLabel =
-      '-${DurationFormatter.format(playerState.chapterRemaining)}';
-    final bookRemainingLabel =
-      '-${DurationFormatter.format(playerState.bookRemaining)}';
+    final totalLabel = DurationFormatter.format(playerState.duration);
 
-    return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ── Header ────────────────────────────────────────────────────
-              Row(
+    final mainPlayerContent = SafeArea(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: constraints.maxHeight - 36,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _RoundedIconButton(
-                    icon: Icons.keyboard_arrow_down_rounded,
-                    scheme: scheme,
-                    semanticsLabel: 'Close player',
-                    onTap: () => context.pop(),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Now Playing',
-                      style: text.titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                  _RoundedIconButton(
-                    icon: Icons.volume_up_rounded,
-                    scheme: scheme,
-                    semanticsLabel: 'Volume controls',
-                    onTap: () => _showVolumeSheet(playerState.volume),
-                  ),
-                  const SizedBox(width: 8),
-                  _RoundedIconButton(
-                    icon: castState.connectedDevice == null
-                        ? Icons.cast_rounded
-                        : Icons.cast_connected_rounded,
-                    scheme: scheme,
-                    semanticsLabel: castState.connectedDevice == null
-                        ? 'Cast playback'
-                        : 'Disconnect cast playback',
-                    onTap: () async {
-                      final notifier = ref.read(castSessionProvider.notifier);
-                      if (castState.connectedDevice != null) {
-                        await notifier.disconnect();
-                        return;
-                      }
-                      await notifier.refreshDevices();
-                      if (!context.mounted) return;
-                      final latest = ref.read(castSessionProvider);
-                      if (latest.devices.isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('No Chromecast devices discovered yet.'),
+                  Row(
+                    children: [
+                      _RoundedIconButton(
+                        icon: Icons.keyboard_arrow_down_rounded,
+                        scheme: scheme,
+                        semanticsLabel: 'Close player',
+                        onTap: () => context.pop(),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Now Playing',
+                          style: text.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
                           ),
-                        );
-                        return;
-                      }
-                      final selected = await showDialog<String>(
-                        context: context,
-                        builder: (ctx) => SimpleDialog(
-                          title: const Text('Cast to device'),
+                        ),
+                      ),
+                      _RoundedIconButton(
+                        icon: Icons.volume_up_rounded,
+                        scheme: scheme,
+                        semanticsLabel: 'Volume controls',
+                        onTap: () => _showVolumeSheet(playerState.volume),
+                      ),
+                      const SizedBox(width: 8),
+                      _RoundedIconButton(
+                        icon: Icons.playlist_play_rounded,
+                        scheme: scheme,
+                        semanticsLabel: 'Open chapter list',
+                        onTap: book != null
+                            ? () => context.push(
+                                AppRoutes.chapterListPath(book.id),
+                              )
+                            : null,
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 18),
+
+                  Row(
+                    children: [
+                      Expanded(
+                        child: AspectRatio(
+                          aspectRatio: 1,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(18),
+                            child: _CoverArea(
+                              coverPath: book?.coverPath,
+                              accentColor: accentColor,
+                              scheme: scheme,
+                              chapterLabel: '',
+                              textTheme: text,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: SizedBox(
+                          width: 40,
+                          height: 160,
+                          child: _CoverFallback(
+                            accentColor: accentColor,
+                            scheme: scheme,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 22),
+
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            for (final device in latest.devices)
-                              SimpleDialogOption(
-                                onPressed: () => Navigator.of(ctx).pop(device.id),
-                                child: Text(device.name),
+                            Text(
+                              title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: text.headlineMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
                               ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              author,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: text.titleMedium?.copyWith(
+                                color: AppColors.subtle(context),
+                              ),
+                            ),
                           ],
                         ),
-                      );
-                      if (selected == null) return;
-                      final match = latest.devices.firstWhere((d) => d.id == selected);
-                      await notifier.connect(match);
-                    },
+                      ),
+                      const SizedBox(width: 10),
+                      _RoundedIconButton(
+                        icon: Icons.playlist_add_check_rounded,
+                        scheme: scheme,
+                        semanticsLabel: 'Add bookmark',
+                        onTap: book == null
+                            ? null
+                            : () => _showAddBookmarkSheet(
+                                bookId: book.id,
+                                position: playerState.position,
+                              ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  _RoundedIconButton(
-                    icon: Icons.playlist_play_rounded,
-                    scheme: scheme,
-                    semanticsLabel: 'Open chapter list',
-                    onTap: book != null
-                        ? () =>
-                            context.push(AppRoutes.chapterListPath(book.id))
-                        : null,
+
+                  const SizedBox(height: 14),
+
+                  SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      activeTrackColor: accentColor,
+                      thumbColor: accentColor,
+                      inactiveTrackColor: scheme.outlineVariant.withValues(
+                        alpha: 0.45,
+                      ),
+                      overlayColor: accentColor.withValues(alpha: 0.08),
+                      trackHeight: 3,
+                      thumbShape: const RoundSliderThumbShape(
+                        enabledThumbRadius: 5,
+                      ),
+                    ),
+                    child: Slider(
+                      value: playerState.progress,
+                      onChanged: (v) =>
+                          ref.read(playerProvider.notifier).seekTo(v),
+                    ),
                   ),
-                ],
-              ),
-
-              const SizedBox(height: 20),
-
-              // ── Cover art ─────────────────────────────────────────────────
-              Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(32),
-                  child: _CoverArea(
-                    coverPath: book?.coverPath,
-                    accentColor: accentColor,
-                    scheme: scheme,
-                    chapterLabel: chapterLabel,
-                    textTheme: text,
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 20),
-
-              // ── Book info ─────────────────────────────────────────────────
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Row(
                       children: [
                         Text(
-                          title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: text.headlineSmall
-                              ?.copyWith(fontWeight: FontWeight.w700),
+                          positionLabel,
+                          style: text.bodySmall?.copyWith(
+                            color: AppColors.subtle(context),
+                          ),
                         ),
-                        const SizedBox(height: 4),
+                        const Spacer(),
                         Text(
-                          author,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: text.titleMedium?.copyWith(
+                          totalLabel,
+                          style: text.bodySmall?.copyWith(
                             color: AppColors.subtle(context),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  _RoundedIconButton(
-                    icon: Icons.playlist_add_check_rounded,
-                    scheme: scheme,
-                    semanticsLabel: 'Add bookmark',
-                    onTap: book == null
-                        ? null
-                        : () => _showAddBookmarkSheet(
-                              bookId: book.id,
-                              position: playerState.position,
-                            ),
-                  ),
-                ],
-              ),
 
-              const SizedBox(height: 16),
+                  const SizedBox(height: 22),
 
-              // ── Progress slider ───────────────────────────────────────────
-              SliderTheme(
-                data: SliderTheme.of(context).copyWith(
-                  activeTrackColor: accentColor,
-                  thumbColor: accentColor,
-                  inactiveTrackColor: accentColor.withValues(alpha: 0.2),
-                  overlayColor: accentColor.withValues(alpha: 0.1),
-                  trackHeight: 4,
-                  thumbShape:
-                      const RoundSliderThumbShape(enabledThumbRadius: 7),
-                ),
-                child: Slider(
-                  value: playerState.progress,
-                  onChanged: (v) =>
-                      ref.read(playerProvider.notifier).seekTo(v),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Row(
-                  children: [
-                    Text(
-                      positionLabel,
-                      style: text.bodySmall
-                          ?.copyWith(color: AppColors.subtle(context)),
-                    ),
-                    const Spacer(),
-                    Text(
-                      chapterRemainingLabel,
-                      style: text.bodySmall
-                          ?.copyWith(color: AppColors.subtle(context)),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 6),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Row(
-                  children: [
-                    Text(
-                      'Chapter left',
-                      style: text.labelSmall
-                          ?.copyWith(color: AppColors.subtle(context)),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      chapterRemainingLabel,
-                      style: text.labelSmall
-                          ?.copyWith(color: AppColors.subtle(context)),
-                    ),
-                    const Spacer(),
-                    Text(
-                      'Book left',
-                      style: text.labelSmall
-                          ?.copyWith(color: AppColors.subtle(context)),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      bookRemainingLabel,
-                      style: text.labelSmall
-                          ?.copyWith(color: AppColors.subtle(context)),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 20),
-
-              // ── Transport controls (M3 Expressive size contrast) ──────────
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  _SideTransportButton(
-                    icon: Icons.replay_rounded,
-                    label: '${skipBwd}s',
-                    scheme: scheme,
-                    semanticsLabel: 'Skip backward ${skipBwd} seconds',
-                    onTap: () =>
-                        ref.read(playerProvider.notifier).skipBackward(skipBwd),
-                  ),
-                  const SizedBox(width: 16),
-                  _PlayPauseButton(
-                    isPlaying: playerState.isPlaying,
-                    isLoading: playerState.isLoading,
-                    accentColor: accentColor,
-                    onAccent: onAccent,
-                    semanticsLabel: playerState.isPlaying ? 'Pause' : 'Play',
-                    onTap: () => ref.read(playerProvider.notifier).togglePlay(),
-                  ),
-                  const SizedBox(width: 16),
-                  _SideTransportButton(
-                    icon: Icons.forward_rounded,
-                    label: '${skipFwd}s',
-                    scheme: scheme,
-                    semanticsLabel: 'Skip forward ${skipFwd} seconds',
-                    onTap: () =>
-                        ref.read(playerProvider.notifier).skipForward(skipFwd),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 10),
-
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _RoundedIconButton(
-                    icon: Icons.skip_previous_rounded,
-                    scheme: scheme,
-                    semanticsLabel: 'Previous chapter',
-                    onTap: () =>
-                        ref.read(playerProvider.notifier).previousChapter(),
-                  ),
-                  const SizedBox(width: 14),
-                  _RoundedIconButton(
-                    icon: Icons.skip_next_rounded,
-                    scheme: scheme,
-                    semanticsLabel: 'Next chapter',
-                    onTap: () => ref.read(playerProvider.notifier).nextChapter(),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 16),
-
-              // ── Mini actions ──────────────────────────────────────────────
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: scheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(22),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: _MiniActionButton(
-                        icon: Icons.history_rounded,
-                        label: 'Undo',
-                        active: playerState.previousPosition != null,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      _SideTransportButton(
+                        icon: Icons.skip_previous_rounded,
                         scheme: scheme,
                         accentColor: accentColor,
-                        onTap: playerState.previousPosition == null
-                            ? null
-                            : () => ref
+                        semanticsLabel: 'Previous chapter',
+                        onTap: () =>
+                            ref.read(playerProvider.notifier).previousChapter(),
+                      ),
+                      const SizedBox(width: 16),
+                      _PlayPauseButton(
+                        isPlaying: playerState.isPlaying,
+                        isLoading: playerState.isLoading,
+                        accentColor: accentColor,
+                        onAccent: onAccent,
+                        semanticsLabel: playerState.isPlaying
+                            ? 'Pause'
+                            : 'Play',
+                        onTap: () =>
+                            ref.read(playerProvider.notifier).togglePlay(),
+                      ),
+                      const SizedBox(width: 16),
+                      _SideTransportButton(
+                        icon: Icons.skip_next_rounded,
+                        scheme: scheme,
+                        accentColor: accentColor,
+                        semanticsLabel: 'Next chapter',
+                        onTap: () =>
+                            ref.read(playerProvider.notifier).nextChapter(),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: scheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _MiniActionButton(
+                            icon: Icons.shuffle_rounded,
+                            active: playerState.shuffleEnabled,
+                            scheme: scheme,
+                            accentColor: accentColor,
+                            onTap: () => ref
                                 .read(playerProvider.notifier)
-                                .undoLastJump(),
-                      ),
+                                .toggleShuffle(),
+                          ),
+                        ),
+                        Expanded(
+                          child: _MiniActionButton(
+                            icon: switch (playerState.loopMode) {
+                              LoopMode.off => Icons.sync_alt_rounded,
+                              LoopMode.all => Icons.repeat_rounded,
+                              LoopMode.one => Icons.repeat_one_rounded,
+                            },
+                            active: playerState.loopMode != LoopMode.off,
+                            scheme: scheme,
+                            accentColor: accentColor,
+                            onTap: () => ref
+                                .read(playerProvider.notifier)
+                                .cycleLoopMode(),
+                          ),
+                        ),
+                        Expanded(
+                          child: _MiniActionButton(
+                            icon: book?.isFavorite == true
+                                ? Icons.favorite_rounded
+                                : Icons.favorite_border_rounded,
+                            active: book?.isFavorite == true,
+                            scheme: scheme,
+                            accentColor: accentColor,
+                            onTap: book == null
+                                ? null
+                                : () => _toggleFavoriteForBook(book),
+                          ),
+                        ),
+                      ],
                     ),
-                    Expanded(
-                      child: _MiniActionButton(
-                        icon: Icons.shuffle_rounded,
-                        active: playerState.shuffleEnabled,
-                        scheme: scheme,
-                        accentColor: accentColor,
-                        onTap: () =>
-                            ref.read(playerProvider.notifier).toggleShuffle(),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      TextButton.icon(
+                        onPressed: () => _showSleepTimerSheet(sleepTimer),
+                        icon: Icon(
+                          sleepTimer.resumeArmed
+                              ? Icons.vibration_rounded
+                              : Icons.bedtime_rounded,
+                        ),
+                        label: Text(_sleepTimerLabel(sleepTimer)),
                       ),
-                    ),
-                    Expanded(
-                      child: _MiniActionButton(
-                        icon: switch (playerState.loopMode) {
-                          LoopMode.off => Icons.sync_alt_rounded,
-                          LoopMode.all => Icons.repeat_rounded,
-                          LoopMode.one => Icons.repeat_one_rounded,
-                        },
-                        active: playerState.loopMode != LoopMode.off,
-                        scheme: scheme,
-                        accentColor: accentColor,
-                        onTap: () =>
-                            ref.read(playerProvider.notifier).cycleLoopMode(),
-                      ),
-                    ),
-                    Expanded(
-                      child: _MiniActionButton(
-                        icon: Icons.speed_rounded,
-                        label:
-                            '${playerState.speed % 1 == 0 ? playerState.speed.toInt() : playerState.speed}×',
-                        active: playerState.speed != 1.0,
-                        scheme: scheme,
-                        accentColor: accentColor,
-                        onTap: () async {
+                      const SizedBox(width: 8),
+                      TextButton.icon(
+                        onPressed: () async {
                           final selected = await showDialog<double>(
                             context: context,
                             builder: (ctx) => SimpleDialog(
@@ -723,14 +677,17 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                                     children: [
                                       Expanded(
                                         child: Text(
-                                            '${v % 1 == 0 ? v.toInt() : v}×'),
+                                          '${v % 1 == 0 ? v.toInt() : v}×',
+                                        ),
                                       ),
                                       if (isSelected)
-                                        Icon(Icons.check_rounded,
-                                            size: 18,
-                                            color: Theme.of(ctx)
-                                                .colorScheme
-                                                .primary),
+                                        Icon(
+                                          Icons.check_rounded,
+                                          size: 18,
+                                          color: Theme.of(
+                                            ctx,
+                                          ).colorScheme.primary,
+                                        ),
                                     ],
                                   ),
                                 );
@@ -743,42 +700,228 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                                 .setSpeed(selected);
                           }
                         },
+                        icon: const Icon(Icons.speed_rounded),
+                        label: Text(
+                          '${playerState.speed % 1 == 0 ? playerState.speed.toInt() : playerState.speed}×',
+                        ),
                       ),
-                    ),
-                    Expanded(
-                      child: _MiniActionButton(
-                        icon: Icons.content_cut_rounded,
-                        label: 'Clip',
-                        active: false,
-                        scheme: scheme,
-                        accentColor: accentColor,
-                        onTap: book == null
+                      const SizedBox(width: 8),
+                      TextButton.icon(
+                        onPressed: book == null
                             ? null
                             : () => _addQuickClip(
-                                  bookId: book.id,
-                                  position: playerState.position,
-                                  chapterDuration: playerState.duration,
-                                ),
+                                bookId: book.id,
+                                position: playerState.position,
+                                chapterDuration: playerState.duration,
+                              ),
+                        icon: const Icon(Icons.content_cut_rounded),
+                        label: const Text('Clip'),
                       ),
-                    ),
-                    Expanded(
-                      child: _MiniActionButton(
-                        icon: sleepTimer.resumeArmed
-                            ? Icons.vibration_rounded
-                            : Icons.bedtime_rounded,
-                        label: _sleepTimerLabel(sleepTimer),
-                        active: sleepTimer.remaining != null ||
-                          sleepTimer.resumeArmed ||
-                          sleepTimer.endOfChapterArmed,
-                        scheme: scheme,
-                        accentColor: accentColor,
-                        onTap: () => _showSleepTimerSheet(sleepTimer),
-                      ),
-                    ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+
+    return Scaffold(
+      body: useCompanionPane && book != null
+          ? Row(
+              children: [
+                Expanded(flex: 7, child: mainPlayerContent),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 4,
+                  child: _PlayerCompanionPane(
+                    book: book,
+                    currentChapterIndex: playerState.currentChapterIndex,
+                    bookmarks: bookmarks,
+                    onChapterTap: (index) {
+                      ref
+                          .read(playerProvider.notifier)
+                          .seekToChapterIndex(index);
+                    },
+                    onBookmarkTap: (bookmark) {
+                      ref
+                          .read(playerProvider.notifier)
+                          .seekToPosition(
+                            Duration(milliseconds: bookmark.positionMs),
+                          );
+                    },
+                    onOpenChaptersRoute: () =>
+                        context.push(AppRoutes.chapterListPath(book.id)),
+                    onOpenBookmarksRoute: () =>
+                        context.push(AppRoutes.bookmarksPath(book.id)),
+                  ),
+                ),
+              ],
+            )
+          : mainPlayerContent,
+    );
+  }
+}
+
+class _PlayerCompanionPane extends StatelessWidget {
+  const _PlayerCompanionPane({
+    required this.book,
+    required this.currentChapterIndex,
+    required this.bookmarks,
+    required this.onChapterTap,
+    required this.onBookmarkTap,
+    required this.onOpenChaptersRoute,
+    required this.onOpenBookmarksRoute,
+  });
+
+  final Audiobook book;
+  final int currentChapterIndex;
+  final List<Bookmark> bookmarks;
+  final ValueChanged<int> onChapterTap;
+  final ValueChanged<Bookmark> onBookmarkTap;
+  final VoidCallback onOpenChaptersRoute;
+  final VoidCallback onOpenBookmarksRoute;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final chapters = [...book.chapters]
+      ..sort((a, b) => a.index.compareTo(b.index));
+    final topBookmarks = bookmarks.take(10).toList();
+
+    return SafeArea(
+      left: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(0, 12, 20, 24),
+        child: Card(
+          color: cs.surfaceContainerLow,
+          child: DefaultTabController(
+            length: 2,
+            child: Column(
+              children: [
+                const SizedBox(height: 10),
+                TabBar(
+                  tabs: [
+                    Tab(text: 'Chapters (${chapters.length})'),
+                    Tab(text: 'Bookmarks (${bookmarks.length})'),
                   ],
                 ),
-              ),
-            ],
+                const Divider(height: 1),
+                Expanded(
+                  child: TabBarView(
+                    children: [
+                      Column(
+                        children: [
+                          Expanded(
+                            child: ListView.separated(
+                              padding: const EdgeInsets.all(10),
+                              itemCount: chapters.length,
+                              separatorBuilder: (_, _) =>
+                                  const SizedBox(height: 6),
+                              itemBuilder: (context, index) {
+                                final chapter = chapters[index];
+                                final isActive =
+                                    chapter.index == currentChapterIndex;
+                                return Material(
+                                  color: isActive
+                                      ? cs.secondaryContainer
+                                      : cs.surfaceContainerHighest,
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: ListTile(
+                                    dense: true,
+                                    onTap: () => onChapterTap(chapter.index),
+                                    leading: Icon(
+                                      isActive
+                                          ? Icons.play_circle_rounded
+                                          : Icons.menu_book_rounded,
+                                    ),
+                                    title: Text(
+                                      chapter.title,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    subtitle: Text(
+                                      'Chapter ${chapter.index + 1}',
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                            child: OutlinedButton.icon(
+                              onPressed: onOpenChaptersRoute,
+                              icon: const Icon(Icons.open_in_new_rounded),
+                              label: const Text('Open full chapter list'),
+                            ),
+                          ),
+                        ],
+                      ),
+                      Column(
+                        children: [
+                          Expanded(
+                            child: topBookmarks.isEmpty
+                                ? Center(
+                                    child: Text(
+                                      'No bookmarks yet',
+                                      style: tt.bodyMedium?.copyWith(
+                                        color: cs.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  )
+                                : ListView.separated(
+                                    padding: const EdgeInsets.all(10),
+                                    itemCount: topBookmarks.length,
+                                    separatorBuilder: (_, _) =>
+                                        const SizedBox(height: 6),
+                                    itemBuilder: (context, index) {
+                                      final bookmark = topBookmarks[index];
+                                      final ms = bookmark.positionMs;
+                                      return Material(
+                                        color: cs.surfaceContainerHighest,
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: ListTile(
+                                          dense: true,
+                                          onTap: () => onBookmarkTap(bookmark),
+                                          leading: Icon(
+                                            bookmark.isClip
+                                                ? Icons.content_cut_rounded
+                                                : Icons.bookmark_rounded,
+                                          ),
+                                          title: Text(
+                                            bookmark.label ??
+                                                'At ${DurationFormatter.format(Duration(milliseconds: ms))}',
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          subtitle: Text(
+                                            DurationFormatter.format(
+                                              Duration(milliseconds: ms),
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                            child: OutlinedButton.icon(
+                              onPressed: onOpenBookmarksRoute,
+                              icon: const Icon(Icons.open_in_new_rounded),
+                              label: const Text('Open full bookmarks'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -815,74 +958,70 @@ class _CoverArea extends StatelessWidget {
           Image.file(
             File(imagePath),
             fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => _CoverFallback(
-              accentColor: accentColor,
-              scheme: scheme,
-            ),
+            errorBuilder: (_, __, ___) =>
+                _CoverFallback(accentColor: accentColor, scheme: scheme),
           )
         else
-          _CoverFallback(
-            accentColor: accentColor,
-            scheme: scheme,
-          ),
+          _CoverFallback(accentColor: accentColor, scheme: scheme),
 
-        // Bottom scrim + chapter label
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: 0,
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(18, 52, 18, 18),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  Colors.transparent,
-                  Colors.black.withValues(alpha: 0.6),
-                ],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-              ),
-            ),
+        if (chapterLabel.isNotEmpty)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+              padding: const EdgeInsets.fromLTRB(18, 52, 18, 18),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  width: 0.5,
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.transparent,
+                    Colors.black.withValues(alpha: 0.6),
+                  ],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
                 ),
               ),
-              child: Text(
-                chapterLabel,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: textTheme.bodySmall?.copyWith(
-                  color: Colors.white,
-                  letterSpacing: 0.2,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 9,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    width: 0.5,
+                  ),
+                ),
+                child: Text(
+                  chapterLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: textTheme.bodySmall?.copyWith(
+                    color: Colors.white,
+                    letterSpacing: 0.2,
+                  ),
                 ),
               ),
             ),
           ),
-        ),
       ],
     );
   }
 }
 
 class _CoverFallback extends StatelessWidget {
-  const _CoverFallback({
-    required this.accentColor,
-    required this.scheme,
-  });
+  const _CoverFallback({required this.accentColor, required this.scheme});
 
   final Color accentColor;
   final ColorScheme scheme;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 420),
+      curve: Curves.easeOutCubic,
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
@@ -919,23 +1058,21 @@ class _RoundedIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final foreground = scheme.onSurfaceVariant;
+    final background = scheme.surfaceContainerHighest;
     return Semantics(
       button: true,
       label: semanticsLabel,
-      child: Material(
-        color: scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(16),
-        child: ExpressiveBounce(
-          enabled: onTap != null,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(16),
-            onTap: onTap,
-            child: SizedBox(
-              width: 48,
-              height: 48,
-              child: Icon(icon, color: scheme.onSurface, size: 22),
-            ),
+      child: ExpressiveBounce(
+        enabled: onTap != null,
+        child: IconButton.filledTonal(
+          onPressed: onTap,
+          style: IconButton.styleFrom(
+            backgroundColor: background,
+            foregroundColor: foreground,
+            minimumSize: const Size(48, 48),
           ),
+          icon: Icon(icon, size: 22),
         ),
       ),
     );
@@ -948,51 +1085,51 @@ class _SideTransportButton extends StatelessWidget {
   const _SideTransportButton({
     required this.icon,
     required this.scheme,
+    required this.accentColor,
     required this.onTap,
     this.semanticsLabel,
-    this.label,
   });
 
   final IconData icon;
   final ColorScheme scheme;
+  final Color accentColor;
   final VoidCallback onTap;
   final String? semanticsLabel;
-  final String? label;
 
   @override
   Widget build(BuildContext context) {
+    final foreground = scheme.onSurfaceVariant;
+    final background = Color.lerp(
+          scheme.surfaceContainerHighest,
+          accentColor,
+          0.12,
+        ) ??
+        scheme.surfaceContainerHighest;
+
     return Semantics(
       button: true,
       label: semanticsLabel,
-      child: Material(
-        color: scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(20),
-        child: ExpressiveBounce(
-          child: InkWell(
-            borderRadius: BorderRadius.circular(20),
-            onTap: onTap,
-            child: SizedBox(
-              width: 56,
-              height: 56,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(icon, size: 22, color: scheme.onSurface),
-                  if (label != null) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      label!,
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: scheme.onSurface.withValues(alpha: 0.7),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
+      child: ExpressiveBounce(
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 320),
+          curve: Curves.easeOutCubic,
+          decoration: BoxDecoration(
+            color: background,
+            borderRadius: BorderRadius.circular(16),
           ),
+          child: FilledButton.tonal(
+          onPressed: onTap,
+          style: FilledButton.styleFrom(
+            minimumSize: const Size(64, 56),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            backgroundColor: Colors.transparent,
+            shadowColor: Colors.transparent,
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [Icon(icon, size: 20, color: foreground)],
+          ),
+        ),
         ),
       ),
     );
@@ -1023,38 +1160,45 @@ class _PlayPauseButton extends StatelessWidget {
     return Semantics(
       button: true,
       label: semanticsLabel,
-      child: Material(
-        color: accentColor,
-        borderRadius: BorderRadius.circular(24),
-        elevation: 4,
-        shadowColor: accentColor.withValues(alpha: 0.45),
-        child: ExpressiveBounce(
-          child: InkWell(
-            borderRadius: BorderRadius.circular(24),
-            onTap: onTap,
-            child: SizedBox(
-              width: 72,
-              height: 72,
+      child: ExpressiveBounce(
+        child: TweenAnimationBuilder<Color?>(
+          tween: ColorTween(end: accentColor),
+          duration: const Duration(milliseconds: 420),
+          curve: Curves.easeOutCubic,
+          builder: (context, animatedColor, child) {
+            final effective = animatedColor ?? accentColor;
+            return FloatingActionButton.large(
+              onPressed: onTap,
+              backgroundColor: effective,
+              foregroundColor: onAccent,
               child: isLoading
-                  ? Center(
-                      child: SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.5,
-                          valueColor: AlwaysStoppedAnimation(onAccent),
-                        ),
+                  ? SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        valueColor: AlwaysStoppedAnimation(onAccent),
                       ),
                     )
-                  : Icon(
-                      isPlaying
-                          ? Icons.pause_rounded
-                          : Icons.play_arrow_rounded,
-                      color: onAccent,
-                      size: 34,
+                  : AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 220),
+                      switchInCurve: Curves.easeOutBack,
+                      switchOutCurve: Curves.easeInCubic,
+                      transitionBuilder: (child, animation) =>
+                          FadeTransition(
+                        opacity: animation,
+                        child: ScaleTransition(scale: animation, child: child),
+                      ),
+                      child: Icon(
+                        isPlaying
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
+                        key: ValueKey<bool>(isPlaying),
+                        size: 34,
+                      ),
                     ),
-            ),
-          ),
+            );
+          },
         ),
       ),
     );
@@ -1070,7 +1214,6 @@ class _MiniActionButton extends StatelessWidget {
     required this.scheme,
     required this.accentColor,
     required this.onTap,
-    this.label,
   });
 
   final IconData icon;
@@ -1078,43 +1221,21 @@ class _MiniActionButton extends StatelessWidget {
   final ColorScheme scheme;
   final Color accentColor;
   final VoidCallback? onTap;
-  final String? label;
 
   @override
   Widget build(BuildContext context) {
-    final bg =
-        active ? accentColor.withValues(alpha: 0.15) : Colors.transparent;
-    final fg = active ? accentColor : scheme.onSurfaceVariant;
-
-    return Material(
-      color: bg,
-      borderRadius: BorderRadius.circular(14),
-      child: ExpressiveBounce(
-        enabled: onTap != null,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: onTap,
-          child: SizedBox(
-            height: 44,
-            child: label != null
-                ? Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(icon, color: fg, size: 18),
-                      const SizedBox(width: 4),
-                      Text(
-                        label!,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: fg,
-                        ),
-                      ),
-                    ],
-                  )
-                : Icon(icon, color: fg, size: 20),
-          ),
+    return Align(
+      alignment: Alignment.center,
+      child: IconButton.filledTonal(
+        onPressed: onTap,
+        style: IconButton.styleFrom(
+          backgroundColor: active
+              ? accentColor.withValues(alpha: 0.16)
+              : scheme.surfaceContainer,
+          foregroundColor: active ? accentColor : scheme.onSurfaceVariant,
+          minimumSize: const Size(44, 44),
         ),
+        icon: Icon(icon, size: 20),
       ),
     );
   }

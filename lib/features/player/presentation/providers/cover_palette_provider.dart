@@ -13,7 +13,7 @@ import '../../../../shared/providers/library_provider.dart';
 /// - The cover file does not exist on disk
 /// - Palette generation fails
 final coverPaletteProvider =
-    FutureProvider.autoDispose.family<Color?, String>((ref, bookId) async {
+  FutureProvider.family<Color?, String>((ref, bookId) async {
   final library = ref.read(libraryProvider);
   final matching = library.where((b) => b.id == bookId);
   if (matching.isEmpty) return null;
@@ -27,6 +27,7 @@ final coverPaletteProvider =
   try {
     final palette = await PaletteGenerator.fromImageProvider(
       FileImage(file),
+        size: const Size(120, 120),
       maximumColorCount: 20,
     );
     return palette.vibrantColor?.color ??
