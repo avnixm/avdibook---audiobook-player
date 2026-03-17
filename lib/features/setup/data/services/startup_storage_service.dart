@@ -25,6 +25,14 @@ class StartupStorageService {
   static const _kvScanFolderPathKey = 'setting_scan_folder_path';
   static const _kvGlobalSpeedKey = 'setting_global_playback_speed';
   static const _kvGlobalVolumeKey = 'setting_global_volume';
+  static const _kvReducedMotionKey = 'setting_reduced_motion';
+  static const _kvTrimSilenceKey = 'setting_trim_silence';
+  static const _kvPreservePitchKey = 'setting_preserve_pitch';
+  static const _kvPlaybackPitchKey = 'setting_playback_pitch';
+  static const _kvSmartRewindSecsKey = 'setting_smart_rewind_secs';
+  static const _kvPlaybackHistoryKey = 'legacy_playback_history_v1';
+  static const _kvVolumeBoostKey = 'setting_volume_boost';
+  static const _kvStereoBalanceKey = 'setting_stereo_balance';
 
   final SharedPreferences _prefs;
   final AppDatabase _database;
@@ -73,6 +81,12 @@ class StartupStorageService {
       StorageKeys.scanFolderPath: _prefs.getString(StorageKeys.scanFolderPath),
       _onboardingCompleteKey: _prefs.getBool(_onboardingCompleteKey),
       _setupCompleteKey: _prefs.getBool(_setupCompleteKey),
+      StorageKeys.trimSilence: _prefs.getBool(StorageKeys.trimSilence),
+      StorageKeys.preservePitch: _prefs.getBool(StorageKeys.preservePitch),
+      StorageKeys.playbackPitch: _prefs.getDouble(StorageKeys.playbackPitch),
+      StorageKeys.smartRewindSecs: _prefs.getInt(StorageKeys.smartRewindSecs),
+      StorageKeys.volumeBoost: _prefs.getDouble(StorageKeys.volumeBoost),
+      StorageKeys.stereoBalance: _prefs.getDouble(StorageKeys.stereoBalance),
     };
 
     await _database.putKeyValue(
@@ -108,6 +122,46 @@ class StartupStorageService {
     final globalVolume = _prefs.getDouble('global_volume');
     if (globalVolume != null) {
       await saveGlobalVolumeSnapshot(globalVolume);
+    }
+
+    final reducedMotion = _prefs.getBool(StorageKeys.reducedMotion);
+    if (reducedMotion != null) {
+      await saveReducedMotionSnapshot(reducedMotion);
+    }
+
+    final trimSilence = _prefs.getBool(StorageKeys.trimSilence);
+    if (trimSilence != null) {
+      await saveTrimSilenceSnapshot(trimSilence);
+    }
+
+    final preservePitch = _prefs.getBool(StorageKeys.preservePitch);
+    if (preservePitch != null) {
+      await savePreservePitchSnapshot(preservePitch);
+    }
+
+    final playbackPitch = _prefs.getDouble(StorageKeys.playbackPitch);
+    if (playbackPitch != null) {
+      await savePlaybackPitchSnapshot(playbackPitch);
+    }
+
+    final smartRewindSecs = _prefs.getInt(StorageKeys.smartRewindSecs);
+    if (smartRewindSecs != null) {
+      await saveSmartRewindSecsSnapshot(smartRewindSecs);
+    }
+
+    final playbackHistory = _prefs.getString(StorageKeys.playbackHistory);
+    if (playbackHistory != null) {
+      await savePlaybackHistorySnapshot(playbackHistory);
+    }
+
+    final volumeBoost = _prefs.getDouble(StorageKeys.volumeBoost);
+    if (volumeBoost != null) {
+      await saveVolumeBoostSnapshot(volumeBoost);
+    }
+
+    final stereoBalance = _prefs.getDouble(StorageKeys.stereoBalance);
+    if (stereoBalance != null) {
+      await saveStereoBalanceSnapshot(stereoBalance);
     }
 
     await _prefs.setBool(_driftMigratedKey, true);
@@ -222,6 +276,110 @@ class StartupStorageService {
 
   Future<double?> loadGlobalVolumeSnapshot() async {
     final raw = await _database.getKeyValue(_kvGlobalVolumeKey);
+    return raw == null ? null : double.tryParse(raw);
+  }
+
+  Future<void> saveReducedMotionSnapshot(bool enabled) {
+    return _database.putKeyValue(
+      key: _kvReducedMotionKey,
+      value: enabled ? '1' : '0',
+    );
+  }
+
+  Future<bool?> loadReducedMotionSnapshot() async {
+    final raw = await _database.getKeyValue(_kvReducedMotionKey);
+    if (raw == null) return null;
+    if (raw == '1') return true;
+    if (raw == '0') return false;
+    return null;
+  }
+
+  Future<void> saveTrimSilenceSnapshot(bool enabled) {
+    return _database.putKeyValue(
+      key: _kvTrimSilenceKey,
+      value: enabled ? '1' : '0',
+    );
+  }
+
+  Future<bool?> loadTrimSilenceSnapshot() async {
+    final raw = await _database.getKeyValue(_kvTrimSilenceKey);
+    if (raw == null) return null;
+    if (raw == '1') return true;
+    if (raw == '0') return false;
+    return null;
+  }
+
+  Future<void> savePreservePitchSnapshot(bool enabled) {
+    return _database.putKeyValue(
+      key: _kvPreservePitchKey,
+      value: enabled ? '1' : '0',
+    );
+  }
+
+  Future<bool?> loadPreservePitchSnapshot() async {
+    final raw = await _database.getKeyValue(_kvPreservePitchKey);
+    if (raw == null) return null;
+    if (raw == '1') return true;
+    if (raw == '0') return false;
+    return null;
+  }
+
+  Future<void> savePlaybackPitchSnapshot(double pitch) {
+    return _database.putKeyValue(
+      key: _kvPlaybackPitchKey,
+      value: pitch.toString(),
+    );
+  }
+
+  Future<double?> loadPlaybackPitchSnapshot() async {
+    final raw = await _database.getKeyValue(_kvPlaybackPitchKey);
+    return raw == null ? null : double.tryParse(raw);
+  }
+
+  Future<void> saveSmartRewindSecsSnapshot(int secs) {
+    return _database.putKeyValue(
+      key: _kvSmartRewindSecsKey,
+      value: secs.toString(),
+    );
+  }
+
+  Future<int?> loadSmartRewindSecsSnapshot() async {
+    final raw = await _database.getKeyValue(_kvSmartRewindSecsKey);
+    return raw == null ? null : int.tryParse(raw);
+  }
+
+  Future<void> savePlaybackHistorySnapshot(String jsonPayload) {
+    return _database.putKeyValue(
+      key: _kvPlaybackHistoryKey,
+      value: jsonPayload,
+    );
+  }
+
+  Future<String?> loadPlaybackHistorySnapshot() {
+    return _database.getKeyValue(_kvPlaybackHistoryKey);
+  }
+
+  Future<void> saveVolumeBoostSnapshot(double boost) {
+    return _database.putKeyValue(
+      key: _kvVolumeBoostKey,
+      value: boost.toString(),
+    );
+  }
+
+  Future<double?> loadVolumeBoostSnapshot() async {
+    final raw = await _database.getKeyValue(_kvVolumeBoostKey);
+    return raw == null ? null : double.tryParse(raw);
+  }
+
+  Future<void> saveStereoBalanceSnapshot(double balance) {
+    return _database.putKeyValue(
+      key: _kvStereoBalanceKey,
+      value: balance.toString(),
+    );
+  }
+
+  Future<double?> loadStereoBalanceSnapshot() async {
+    final raw = await _database.getKeyValue(_kvStereoBalanceKey);
     return raw == null ? null : double.tryParse(raw);
   }
 

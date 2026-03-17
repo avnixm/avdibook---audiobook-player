@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:avdibook/core/utils/duration_formatter.dart';
@@ -15,6 +16,40 @@ class BookmarksScreen extends ConsumerStatefulWidget {
 }
 
 class _BookmarksScreenState extends ConsumerState<BookmarksScreen> {
+  Future<void> _exportBookmarks(List<Bookmark> bookmarks) async {
+    final buffer = StringBuffer();
+    buffer.writeln('AvdiBook Bookmarks');
+    buffer.writeln('Book ID: ${widget.bookId}');
+    buffer.writeln('Generated: ${DateTime.now().toIso8601String()}');
+    buffer.writeln('');
+
+    for (var i = 0; i < bookmarks.length; i++) {
+      final item = bookmarks[i];
+      final ts = DurationFormatter.format(Duration(milliseconds: item.positionMs));
+      final title = item.label ?? (item.isClip ? 'Clip ${i + 1}' : 'Bookmark ${i + 1}');
+      buffer.writeln('${i + 1}. $title');
+      if (item.isClip) {
+        final clipStart = Duration(milliseconds: item.clipStartMs!);
+        final clipEnd = Duration(milliseconds: item.clipEndMs!);
+        buffer.writeln(
+          '   Clip: ${DurationFormatter.format(clipStart)} - ${DurationFormatter.format(clipEnd)}',
+        );
+      } else {
+        buffer.writeln('   Time: $ts');
+      }
+      if (item.note != null && item.note!.trim().isNotEmpty) {
+        buffer.writeln('   Note: ${item.note!.trim()}');
+      }
+      buffer.writeln('');
+    }
+
+    await Clipboard.setData(ClipboardData(text: buffer.toString()));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Bookmarks copied to clipboard.')),
+    );
+  }
+
   Future<void> _showEditDialog(Bookmark bookmark) async {
     final titleCtl = TextEditingController(text: bookmark.label ?? '');
     final noteCtl = TextEditingController(text: bookmark.note ?? '');
@@ -83,6 +118,12 @@ class _BookmarksScreenState extends ConsumerState<BookmarksScreen> {
         actions: [
           if (bookmarks.isNotEmpty)
             IconButton(
+              tooltip: 'Export',
+              onPressed: () => _exportBookmarks(bookmarks),
+              icon: const Icon(Icons.ios_share_rounded),
+            ),
+          if (bookmarks.isNotEmpty)
+            IconButton(
               tooltip: 'Clear all',
               onPressed: () => ref
                   .read(bookmarksProvider.notifier)
@@ -106,6 +147,9 @@ class _BookmarksScreenState extends ConsumerState<BookmarksScreen> {
               itemBuilder: (context, index) {
                 final item = bookmarks[index];
                 final position = Duration(milliseconds: item.positionMs);
+                final clipRange = item.isClip
+                  ? '${DurationFormatter.format(Duration(milliseconds: item.clipStartMs!))} - ${DurationFormatter.format(Duration(milliseconds: item.clipEndMs!))}'
+                  : null;
 
                 return Material(
                   color: Theme.of(context).colorScheme.surfaceContainerLow,
@@ -118,18 +162,20 @@ class _BookmarksScreenState extends ConsumerState<BookmarksScreen> {
                       if (context.mounted) Navigator.of(context).pop();
                     },
                     leading: Icon(
-                      Icons.bookmark_rounded,
+                      item.isClip
+                          ? Icons.content_cut_rounded
+                          : Icons.bookmark_rounded,
                       color: Theme.of(context).colorScheme.primary,
                     ),
                     title: Text(
-                      item.label ?? 'Bookmark ${index + 1}',
+                      item.label ?? (item.isClip ? 'Clip ${index + 1}' : 'Bookmark ${index + 1}'),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     subtitle: Text(
                       item.note == null || item.note!.isEmpty
-                          ? DurationFormatter.format(position)
-                          : '${DurationFormatter.format(position)}\n${item.note}',
+                          ? (clipRange ?? DurationFormatter.format(position))
+                          : '${clipRange ?? DurationFormatter.format(position)}\n${item.note}',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),

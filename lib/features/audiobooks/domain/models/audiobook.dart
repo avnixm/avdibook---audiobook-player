@@ -1,7 +1,7 @@
 import 'package:equatable/equatable.dart';
+import 'package:avdibook/features/audiobooks/domain/models/audiobook_author.dart';
+import 'package:avdibook/features/audiobooks/domain/models/audiobook_chapter.dart';
 
-import 'audiobook_author.dart';
-import 'audiobook_chapter.dart';
 
 enum BookStatus {
   newBook,

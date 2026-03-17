@@ -12,6 +12,7 @@ class AvdiBookApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final router = AppRouter.router;
     final themeModeIndex = ref.watch(themeModeProvider);
+    final reducedMotion = ref.watch(reducedMotionProvider);
     final themeMode = switch (themeModeIndex) {
       1 => ThemeMode.light,
       2 => ThemeMode.dark,
@@ -30,6 +31,14 @@ class AvdiBookApp extends ConsumerWidget {
           theme: AppTheme.light(lightScheme),
           darkTheme: AppTheme.dark(darkScheme),
           routerConfig: router,
+          builder: (context, child) {
+            final mq = MediaQuery.of(context);
+            final effectiveDisable = mq.disableAnimations || reducedMotion;
+            return MediaQuery(
+              data: mq.copyWith(disableAnimations: effectiveDisable),
+              child: child ?? const SizedBox.shrink(),
+            );
+          },
         );
       },
     );

@@ -302,6 +302,33 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     noteCtl.dispose();
   }
 
+  Future<void> _addQuickClip({
+    required String bookId,
+    required Duration position,
+    required Duration chapterDuration,
+  }) async {
+    final start = position - const Duration(seconds: 15);
+    final boundedStart = start < Duration.zero ? Duration.zero : start;
+    final end = position + const Duration(seconds: 15);
+    final boundedEnd =
+        chapterDuration > Duration.zero && end > chapterDuration
+            ? chapterDuration
+            : end;
+
+    await ref.read(bookmarksProvider.notifier).addClip(
+          bookId: bookId,
+          start: boundedStart,
+          end: boundedEnd,
+          label:
+              'Clip ${DurationFormatter.format(boundedStart)} - ${DurationFormatter.format(boundedEnd)}',
+        );
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Clip saved to bookmarks.')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -363,6 +390,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                   _RoundedIconButton(
                     icon: Icons.keyboard_arrow_down_rounded,
                     scheme: scheme,
+                    semanticsLabel: 'Close player',
                     onTap: () => context.pop(),
                   ),
                   const SizedBox(width: 12),
@@ -376,12 +404,14 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                   _RoundedIconButton(
                     icon: Icons.volume_up_rounded,
                     scheme: scheme,
+                    semanticsLabel: 'Volume controls',
                     onTap: () => _showVolumeSheet(playerState.volume),
                   ),
                   const SizedBox(width: 8),
                   _RoundedIconButton(
                     icon: Icons.playlist_play_rounded,
                     scheme: scheme,
+                    semanticsLabel: 'Open chapter list',
                     onTap: book != null
                         ? () =>
                             context.push(AppRoutes.chapterListPath(book.id))
@@ -438,6 +468,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                   _RoundedIconButton(
                     icon: Icons.playlist_add_check_rounded,
                     scheme: scheme,
+                    semanticsLabel: 'Add bookmark',
                     onTap: book == null
                         ? null
                         : () => _showAddBookmarkSheet(
@@ -529,6 +560,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                     icon: Icons.replay_rounded,
                     label: '${skipBwd}s',
                     scheme: scheme,
+                    semanticsLabel: 'Skip backward ${skipBwd} seconds',
                     onTap: () =>
                         ref.read(playerProvider.notifier).skipBackward(skipBwd),
                   ),
@@ -538,6 +570,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                     isLoading: playerState.isLoading,
                     accentColor: accentColor,
                     onAccent: onAccent,
+                    semanticsLabel: playerState.isPlaying ? 'Pause' : 'Play',
                     onTap: () => ref.read(playerProvider.notifier).togglePlay(),
                   ),
                   const SizedBox(width: 16),
@@ -545,8 +578,31 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                     icon: Icons.forward_rounded,
                     label: '${skipFwd}s',
                     scheme: scheme,
+                    semanticsLabel: 'Skip forward ${skipFwd} seconds',
                     onTap: () =>
                         ref.read(playerProvider.notifier).skipForward(skipFwd),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 10),
+
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _RoundedIconButton(
+                    icon: Icons.skip_previous_rounded,
+                    scheme: scheme,
+                    semanticsLabel: 'Previous chapter',
+                    onTap: () =>
+                        ref.read(playerProvider.notifier).previousChapter(),
+                  ),
+                  const SizedBox(width: 14),
+                  _RoundedIconButton(
+                    icon: Icons.skip_next_rounded,
+                    scheme: scheme,
+                    semanticsLabel: 'Next chapter',
+                    onTap: () => ref.read(playerProvider.notifier).nextChapter(),
                   ),
                 ],
               ),
@@ -641,6 +697,22 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                                 .setSpeed(selected);
                           }
                         },
+                      ),
+                    ),
+                    Expanded(
+                      child: _MiniActionButton(
+                        icon: Icons.content_cut_rounded,
+                        label: 'Clip',
+                        active: false,
+                        scheme: scheme,
+                        accentColor: accentColor,
+                        onTap: book == null
+                            ? null
+                            : () => _addQuickClip(
+                                  bookId: book.id,
+                                  position: playerState.position,
+                                  chapterDuration: playerState.duration,
+                                ),
                       ),
                     ),
                     Expanded(
@@ -790,27 +862,33 @@ class _RoundedIconButton extends StatelessWidget {
   const _RoundedIconButton({
     required this.icon,
     required this.scheme,
+    this.semanticsLabel,
     this.onTap,
   });
 
   final IconData icon;
   final ColorScheme scheme;
+  final String? semanticsLabel;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: scheme.surfaceContainerHighest,
-      borderRadius: BorderRadius.circular(16),
-      child: ExpressiveBounce(
-        enabled: onTap != null,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: onTap,
-          child: SizedBox(
-            width: 44,
-            height: 44,
-            child: Icon(icon, color: scheme.onSurface, size: 22),
+    return Semantics(
+      button: true,
+      label: semanticsLabel,
+      child: Material(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(16),
+        child: ExpressiveBounce(
+          enabled: onTap != null,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: onTap,
+            child: SizedBox(
+              width: 48,
+              height: 48,
+              child: Icon(icon, color: scheme.onSurface, size: 22),
+            ),
           ),
         ),
       ),
@@ -825,42 +903,48 @@ class _SideTransportButton extends StatelessWidget {
     required this.icon,
     required this.scheme,
     required this.onTap,
+    this.semanticsLabel,
     this.label,
   });
 
   final IconData icon;
   final ColorScheme scheme;
   final VoidCallback onTap;
+  final String? semanticsLabel;
   final String? label;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: scheme.surfaceContainerHighest,
-      borderRadius: BorderRadius.circular(20),
-      child: ExpressiveBounce(
-        child: InkWell(
-          borderRadius: BorderRadius.circular(20),
-          onTap: onTap,
-          child: SizedBox(
-            width: 56,
-            height: 56,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, size: 22, color: scheme.onSurface),
-                if (label != null) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    label!,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: scheme.onSurface.withValues(alpha: 0.7),
+    return Semantics(
+      button: true,
+      label: semanticsLabel,
+      child: Material(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(20),
+        child: ExpressiveBounce(
+          child: InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: onTap,
+            child: SizedBox(
+              width: 56,
+              height: 56,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, size: 22, color: scheme.onSurface),
+                  if (label != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      label!,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: scheme.onSurface.withValues(alpha: 0.7),
+                      ),
                     ),
-                  ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ),
@@ -877,6 +961,7 @@ class _PlayPauseButton extends StatelessWidget {
     required this.isLoading,
     required this.accentColor,
     required this.onAccent,
+    required this.semanticsLabel,
     required this.onTap,
   });
 
@@ -884,38 +969,45 @@ class _PlayPauseButton extends StatelessWidget {
   final bool isLoading;
   final Color accentColor;
   final Color onAccent;
+  final String semanticsLabel;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: accentColor,
-      borderRadius: BorderRadius.circular(24),
-      elevation: 4,
-      shadowColor: accentColor.withValues(alpha: 0.45),
-      child: ExpressiveBounce(
-        child: InkWell(
-          borderRadius: BorderRadius.circular(24),
-          onTap: onTap,
-          child: SizedBox(
-            width: 72,
-            height: 72,
-            child: isLoading
-                ? Center(
-                    child: SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.5,
-                        valueColor: AlwaysStoppedAnimation(onAccent),
+    return Semantics(
+      button: true,
+      label: semanticsLabel,
+      child: Material(
+        color: accentColor,
+        borderRadius: BorderRadius.circular(24),
+        elevation: 4,
+        shadowColor: accentColor.withValues(alpha: 0.45),
+        child: ExpressiveBounce(
+          child: InkWell(
+            borderRadius: BorderRadius.circular(24),
+            onTap: onTap,
+            child: SizedBox(
+              width: 72,
+              height: 72,
+              child: isLoading
+                  ? Center(
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          valueColor: AlwaysStoppedAnimation(onAccent),
+                        ),
                       ),
+                    )
+                  : Icon(
+                      isPlaying
+                          ? Icons.pause_rounded
+                          : Icons.play_arrow_rounded,
+                      color: onAccent,
+                      size: 34,
                     ),
-                  )
-                : Icon(
-                    isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                    color: onAccent,
-                    size: 34,
-                  ),
+            ),
           ),
         ),
       ),

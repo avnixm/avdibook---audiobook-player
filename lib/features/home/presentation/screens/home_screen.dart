@@ -16,6 +16,7 @@ import 'package:avdibook/features/audiobooks/domain/models/audiobook.dart';
 import 'package:avdibook/features/setup/presentation/providers/setup_controller.dart';
 import 'package:avdibook/shared/providers/library_provider.dart';
 import 'package:avdibook/shared/providers/listening_analytics_provider.dart';
+import 'package:avdibook/shared/providers/playback_history_provider.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -27,6 +28,7 @@ class HomeScreen extends ConsumerWidget {
     final library = ref.watch(libraryProvider);
     final analytics = ref.watch(listeningAnalyticsProvider);
     final setupState = ref.watch(setupControllerProvider);
+    final playbackHistory = ref.watch(playbackHistoryProvider);
     final isBusy = setupState.isBusy;
     final statusCounts = _buildStatusCounts(library, analytics.byBook);
     final continueListening = library
@@ -56,6 +58,11 @@ class HomeScreen extends ConsumerWidget {
 
     final recentlyAdded = [...library]
       ..sort((a, b) => b.importedAt.compareTo(a.importedAt));
+
+    final historyItems = playbackHistory
+      .where((entry) => library.any((book) => book.id == entry.bookId))
+      .take(12)
+      .toList();
 
     void importFiles() =>
         ref.read(setupControllerProvider.notifier).importFiles();
@@ -207,6 +214,61 @@ class HomeScreen extends ConsumerWidget {
                 onTap: (book) => context.push(AppRoutes.playerPath(book.id)),
               ),
             ],
+            if (historyItems.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              SectionHeader(title: 'Playback History'),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 112,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: historyItems.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 10),
+                  itemBuilder: (context, index) {
+                    final event = historyItems[index];
+                    final book = library.firstWhere((b) => b.id == event.bookId);
+                    return SizedBox(
+                      width: 250,
+                      child: ExpressiveBounce(
+                        child: Card(
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(16),
+                            onTap: () => context.push(AppRoutes.playerPath(book.id)),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    book.title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: text.titleSmall,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '${event.event == 'pause' ? 'Paused' : 'Resumed'} at ${DurationFormatter.format(Duration(milliseconds: event.positionMs))}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: text.bodySmall,
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    _relativeTime(event.playedAt),
+                                    style: text.labelSmall,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
           ],
           const SizedBox(height: AppSpacing.xxl),
           SectionHeader(
@@ -296,6 +358,14 @@ class HomeScreen extends ConsumerWidget {
   }
 }
 
+String _relativeTime(DateTime value) {
+  final delta = DateTime.now().difference(value);
+  if (delta.inMinutes < 1) return 'just now';
+  if (delta.inHours < 1) return '${delta.inMinutes}m ago';
+  if (delta.inDays < 1) return '${delta.inHours}h ago';
+  return '${delta.inDays}d ago';
+}
+
 Map<BookStatus, int> _buildStatusCounts(
   List<Audiobook> books,
   Map<String, BookListeningStats> analyticsByBook,
@@ -354,6 +424,82 @@ class _ExpressiveBounceIn extends StatelessWidget {
         );
       },
       child: child,
+    );
+  }
+}
+
+class _BookRail extends StatelessWidget {
+  const _BookRail({
+    required this.books,
+    required this.onTap,
+  });
+
+  final List<Audiobook> books;
+  final void Function(Audiobook book) onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+
+    return SizedBox(
+      height: 172,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: books.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 12),
+        itemBuilder: (context, index) {
+          final book = books[index];
+          return ExpressiveBounce(
+            child: Material(
+              color: scheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(22),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(22),
+                onTap: () => onTap(book),
+                child: SizedBox(
+                  width: 138,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: scheme.primary.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            alignment: Alignment.center,
+                            child: Icon(
+                              Icons.headphones_rounded,
+                              color: scheme.primary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          book.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: text.titleSmall,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${(book.progress * 100).round()}% done',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: text.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 }

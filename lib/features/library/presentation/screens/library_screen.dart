@@ -18,6 +18,7 @@ enum LibraryViewFilter {
   continueListening,
   recentPlayed,
   favorites,
+  downloaded,
 }
 
 enum LibrarySortMode {
@@ -79,6 +80,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               book.lastPlayedAt != null;
         case LibraryViewFilter.favorites:
           return book.isFavorite;
+        case LibraryViewFilter.downloaded:
+          return book.sourcePaths.isNotEmpty;
       }
     }).toList()
       ..sort((a, b) {
@@ -188,6 +191,14 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                           active: _viewFilter == LibraryViewFilter.favorites,
                           onTap: () =>
                               setState(() => _viewFilter = LibraryViewFilter.favorites),
+                        ),
+                        _StatusCounterChip(
+                          icon: Icons.download_done_rounded,
+                          label: 'Downloaded',
+                          count: sorted.where((book) => book.sourcePaths.isNotEmpty).length,
+                          active: _viewFilter == LibraryViewFilter.downloaded,
+                          onTap: () =>
+                              setState(() => _viewFilter = LibraryViewFilter.downloaded),
                         ),
                         _StatusCounterChip(
                           icon: Icons.fiber_new_rounded,

@@ -226,3 +226,245 @@ class GlobalVolumeNotifier extends Notifier<double> {
 
 final globalVolumeProvider =
     NotifierProvider<GlobalVolumeNotifier, double>(GlobalVolumeNotifier.new);
+
+// ─── Reduced motion ─────────────────────────────────────────────────────────
+
+class ReducedMotionNotifier extends Notifier<bool> {
+  @override
+  bool build() {
+    final prefs = ref.watch(sharedPreferencesProvider);
+    if (!prefs.containsKey(StorageKeys.reducedMotion)) {
+      unawaited(_hydrateFromDriftIfNeeded());
+    }
+    return prefs.getBool(StorageKeys.reducedMotion) ?? false;
+  }
+
+  Future<void> _hydrateFromDriftIfNeeded() async {
+    final fallback =
+        await ref.read(startupStorageServiceProvider).loadReducedMotionSnapshot();
+    if (fallback == null || !ref.mounted) return;
+
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setBool(StorageKeys.reducedMotion, fallback);
+    state = fallback;
+  }
+
+  Future<void> set(bool enabled) async {
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setBool(StorageKeys.reducedMotion, enabled);
+    await ref
+        .read(startupStorageServiceProvider)
+        .saveReducedMotionSnapshot(enabled);
+    state = enabled;
+  }
+}
+
+final reducedMotionProvider =
+    NotifierProvider<ReducedMotionNotifier, bool>(ReducedMotionNotifier.new);
+
+// ─── Audio control preferences ─────────────────────────────────────────────
+
+class TrimSilenceNotifier extends Notifier<bool> {
+  @override
+  bool build() {
+    final prefs = ref.watch(sharedPreferencesProvider);
+    if (!prefs.containsKey(StorageKeys.trimSilence)) {
+      unawaited(_hydrateFromDriftIfNeeded());
+    }
+    return prefs.getBool(StorageKeys.trimSilence) ?? false;
+  }
+
+  Future<void> _hydrateFromDriftIfNeeded() async {
+    final fallback =
+        await ref.read(startupStorageServiceProvider).loadTrimSilenceSnapshot();
+    if (fallback == null || !ref.mounted) return;
+
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setBool(StorageKeys.trimSilence, fallback);
+    state = fallback;
+  }
+
+  Future<void> set(bool enabled) async {
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setBool(StorageKeys.trimSilence, enabled);
+    await ref
+        .read(startupStorageServiceProvider)
+        .saveTrimSilenceSnapshot(enabled);
+    state = enabled;
+  }
+}
+
+final trimSilenceProvider =
+    NotifierProvider<TrimSilenceNotifier, bool>(TrimSilenceNotifier.new);
+
+class PreservePitchNotifier extends Notifier<bool> {
+  @override
+  bool build() {
+    final prefs = ref.watch(sharedPreferencesProvider);
+    if (!prefs.containsKey(StorageKeys.preservePitch)) {
+      unawaited(_hydrateFromDriftIfNeeded());
+    }
+    return prefs.getBool(StorageKeys.preservePitch) ?? true;
+  }
+
+  Future<void> _hydrateFromDriftIfNeeded() async {
+    final fallback = await ref
+        .read(startupStorageServiceProvider)
+        .loadPreservePitchSnapshot();
+    if (fallback == null || !ref.mounted) return;
+
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setBool(StorageKeys.preservePitch, fallback);
+    state = fallback;
+  }
+
+  Future<void> set(bool enabled) async {
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setBool(StorageKeys.preservePitch, enabled);
+    await ref
+        .read(startupStorageServiceProvider)
+        .savePreservePitchSnapshot(enabled);
+    state = enabled;
+  }
+}
+
+final preservePitchProvider =
+    NotifierProvider<PreservePitchNotifier, bool>(PreservePitchNotifier.new);
+
+class PlaybackPitchNotifier extends Notifier<double> {
+  @override
+  double build() {
+    final prefs = ref.watch(sharedPreferencesProvider);
+    if (!prefs.containsKey(StorageKeys.playbackPitch)) {
+      unawaited(_hydrateFromDriftIfNeeded());
+    }
+    return prefs.getDouble(StorageKeys.playbackPitch) ?? 1.0;
+  }
+
+  Future<void> _hydrateFromDriftIfNeeded() async {
+    final fallback =
+        await ref.read(startupStorageServiceProvider).loadPlaybackPitchSnapshot();
+    if (fallback == null || !ref.mounted) return;
+
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setDouble(StorageKeys.playbackPitch, fallback);
+    state = fallback;
+  }
+
+  Future<void> set(double pitch) async {
+    final normalized = pitch.clamp(0.5, 2.0);
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setDouble(StorageKeys.playbackPitch, normalized);
+    await ref
+        .read(startupStorageServiceProvider)
+        .savePlaybackPitchSnapshot(normalized);
+    state = normalized;
+  }
+}
+
+final playbackPitchProvider =
+    NotifierProvider<PlaybackPitchNotifier, double>(PlaybackPitchNotifier.new);
+
+class SmartRewindSecsNotifier extends Notifier<int> {
+  @override
+  int build() {
+    final prefs = ref.watch(sharedPreferencesProvider);
+    if (!prefs.containsKey(StorageKeys.smartRewindSecs)) {
+      unawaited(_hydrateFromDriftIfNeeded());
+    }
+    return prefs.getInt(StorageKeys.smartRewindSecs) ??
+        AppDefaults.smartRewindSecs;
+  }
+
+  Future<void> _hydrateFromDriftIfNeeded() async {
+    final fallback = await ref
+        .read(startupStorageServiceProvider)
+        .loadSmartRewindSecsSnapshot();
+    if (fallback == null || !ref.mounted) return;
+
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setInt(StorageKeys.smartRewindSecs, fallback);
+    state = fallback;
+  }
+
+  Future<void> set(int secs) async {
+    final normalized = secs.clamp(0, 30);
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setInt(StorageKeys.smartRewindSecs, normalized);
+    await ref
+        .read(startupStorageServiceProvider)
+        .saveSmartRewindSecsSnapshot(normalized);
+    state = normalized;
+  }
+}
+
+final smartRewindSecsProvider = NotifierProvider<SmartRewindSecsNotifier, int>(
+  SmartRewindSecsNotifier.new,
+);
+
+class VolumeBoostNotifier extends Notifier<double> {
+  @override
+  double build() {
+    final prefs = ref.watch(sharedPreferencesProvider);
+    if (!prefs.containsKey(StorageKeys.volumeBoost)) {
+      unawaited(_hydrateFromDriftIfNeeded());
+    }
+    return prefs.getDouble(StorageKeys.volumeBoost) ?? AppDefaults.volumeBoost;
+  }
+
+  Future<void> _hydrateFromDriftIfNeeded() async {
+    final fallback =
+        await ref.read(startupStorageServiceProvider).loadVolumeBoostSnapshot();
+    if (fallback == null || !ref.mounted) return;
+
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setDouble(StorageKeys.volumeBoost, fallback);
+    state = fallback;
+  }
+
+  Future<void> set(double boost) async {
+    final normalized = boost.clamp(0.0, 1.0);
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setDouble(StorageKeys.volumeBoost, normalized);
+    await ref.read(startupStorageServiceProvider).saveVolumeBoostSnapshot(normalized);
+    state = normalized;
+  }
+}
+
+final volumeBoostProvider =
+    NotifierProvider<VolumeBoostNotifier, double>(VolumeBoostNotifier.new);
+
+class StereoBalanceNotifier extends Notifier<double> {
+  @override
+  double build() {
+    final prefs = ref.watch(sharedPreferencesProvider);
+    if (!prefs.containsKey(StorageKeys.stereoBalance)) {
+      unawaited(_hydrateFromDriftIfNeeded());
+    }
+    return prefs.getDouble(StorageKeys.stereoBalance) ?? AppDefaults.stereoBalance;
+  }
+
+  Future<void> _hydrateFromDriftIfNeeded() async {
+    final fallback = await ref
+        .read(startupStorageServiceProvider)
+        .loadStereoBalanceSnapshot();
+    if (fallback == null || !ref.mounted) return;
+
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setDouble(StorageKeys.stereoBalance, fallback);
+    state = fallback;
+  }
+
+  Future<void> set(double balance) async {
+    final normalized = balance.clamp(-1.0, 1.0);
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setDouble(StorageKeys.stereoBalance, normalized);
+    await ref
+        .read(startupStorageServiceProvider)
+        .saveStereoBalanceSnapshot(normalized);
+    state = normalized;
+  }
+}
+
+final stereoBalanceProvider =
+    NotifierProvider<StereoBalanceNotifier, double>(StereoBalanceNotifier.new);

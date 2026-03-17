@@ -29,13 +29,15 @@ class _ExpressiveBounceState extends State<ExpressiveBounce> {
 
   @override
   Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+
     return Listener(
       onPointerDown: (_) => _setPressed(true),
       onPointerUp: (_) => _setPressed(false),
       onPointerCancel: (_) => _setPressed(false),
       child: AnimatedScale(
-        scale: _pressed ? widget.pressedScale : 1,
-        duration: widget.duration,
+        scale: reduceMotion ? 1 : (_pressed ? widget.pressedScale : 1),
+        duration: reduceMotion ? Duration.zero : widget.duration,
         curve: Curves.easeOutCubic,
         child: widget.child,
       ),

@@ -16,6 +16,7 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   static const _skipOptions = [5, 10, 15, 20, 30, 45, 60];
+  static const _smartRewindOptions = [0, 3, 5, 7, 10, 15, 20];
   static const _themeLabels = ['System', 'Light', 'Dark'];
 
   Future<void> _pickOption<T>({
@@ -57,6 +58,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final skipBwd = ref.watch(skipBackwardSecsProvider);
     final themeMode = ref.watch(themeModeProvider);
     final speed = ref.watch(globalPlaybackSpeedProvider);
+    final trimSilence = ref.watch(trimSilenceProvider);
+    final preservePitch = ref.watch(preservePitchProvider);
+    final pitch = ref.watch(playbackPitchProvider);
+    final smartRewindSecs = ref.watch(smartRewindSecsProvider);
+    final volumeBoost = ref.watch(volumeBoostProvider);
+    final stereoBalance = ref.watch(stereoBalanceProvider);
+    final reducedMotion = ref.watch(reducedMotionProvider);
     final savedFolder = ref.watch(scanFolderPathProvider);
     final setupState = ref.watch(setupControllerProvider);
     final isBusy = setupState.isBusy;
@@ -126,6 +134,68 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                     .set(v),
                               ),
                     ),
+                    _SettingsTile(
+                      icon: Icons.replay_10_rounded,
+                      label: 'Smart Rewind',
+                      value: '${smartRewindSecs}s',
+                      subtitle: 'When resuming after a pause',
+                      onTap: isBusy
+                          ? null
+                          : () => _pickOption<int>(
+                                title: 'Smart Rewind',
+                                options: _smartRewindOptions,
+                                current: smartRewindSecs,
+                                label: (v) => v == 0 ? 'Off' : '${v}s',
+                                onSelect: (v) => ref
+                                    .read(smartRewindSecsProvider.notifier)
+                                    .set(v),
+                              ),
+                    ),
+                    SwitchListTile.adaptive(
+                      value: trimSilence,
+                      onChanged: isBusy
+                          ? null
+                          : (value) => ref
+                              .read(trimSilenceProvider.notifier)
+                              .set(value),
+                      title: const Text('Trim silence'),
+                      subtitle: const Text(
+                        'Auto-skip silent gaps for faster listening.',
+                      ),
+                      secondary: const Icon(Icons.graphic_eq_rounded),
+                    ),
+                    SwitchListTile.adaptive(
+                      value: preservePitch,
+                      onChanged: isBusy
+                          ? null
+                          : (value) => ref
+                              .read(preservePitchProvider.notifier)
+                              .set(value),
+                      title: const Text('Preserve pitch'),
+                      subtitle: const Text(
+                        'Keep voice tone natural at different speeds.',
+                      ),
+                      secondary: const Icon(Icons.tune_rounded),
+                    ),
+                    _SettingsTile(
+                      icon: Icons.multitrack_audio_rounded,
+                      label: 'Voice Pitch',
+                      value: '${pitch.toStringAsFixed(1)}×',
+                      subtitle: preservePitch
+                          ? 'Used while preserve pitch is on'
+                          : 'Enable preserve pitch to customize',
+                      onTap: isBusy
+                          ? null
+                          : () => _pickOption<double>(
+                                title: 'Voice Pitch',
+                                options: AppDefaults.pitchOptions,
+                                current: pitch,
+                                label: (v) => '${v.toStringAsFixed(1)}×',
+                                onSelect: (v) => ref
+                                    .read(playbackPitchProvider.notifier)
+                                    .set(v),
+                              ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -147,6 +217,77 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                     .read(themeModeProvider.notifier)
                                     .setMode(v),
                               ),
+                    ),
+                    SwitchListTile.adaptive(
+                      value: reducedMotion,
+                      onChanged: isBusy
+                          ? null
+                          : (value) => ref
+                              .read(reducedMotionProvider.notifier)
+                              .set(value),
+                      title: const Text('Reduced motion'),
+                      subtitle: const Text(
+                        'Use fewer movement animations across the app.',
+                      ),
+                      secondary: const Icon(Icons.motion_photos_off_rounded),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _SettingsSection(
+                  title: 'Audio Effects',
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.volume_up_rounded),
+                      title: const Text('Volume boost'),
+                      subtitle: Text('${(volumeBoost * 100).round()}%'),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Slider(
+                        value: volumeBoost,
+                        onChanged: isBusy
+                            ? null
+                            : (value) => ref
+                                .read(volumeBoostProvider.notifier)
+                                .set(value),
+                        min: 0,
+                        max: 1,
+                        divisions: 10,
+                        label: '${(volumeBoost * 100).round()}%',
+                      ),
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.surround_sound_rounded),
+                      title: const Text('Stereo balance'),
+                      subtitle: Text(
+                        stereoBalance == 0
+                            ? 'Centered'
+                            : stereoBalance < 0
+                                ? 'Left ${(stereoBalance.abs() * 100).round()}%'
+                                : 'Right ${(stereoBalance * 100).round()}%',
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Slider(
+                        value: stereoBalance,
+                        onChanged: isBusy
+                            ? null
+                            : (value) => ref
+                                .read(stereoBalanceProvider.notifier)
+                                .set(value),
+                        min: -1,
+                        max: 1,
+                        divisions: 20,
+                      ),
+                    ),
+                    const ListTile(
+                      leading: Icon(Icons.equalizer_rounded),
+                      title: Text('Equalizer'),
+                      subtitle: Text(
+                        'Coming next: native DSP presets and per-band controls.',
+                      ),
                     ),
                   ],
                 ),

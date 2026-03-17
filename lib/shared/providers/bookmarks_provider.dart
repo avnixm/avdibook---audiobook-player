@@ -16,6 +16,8 @@ class Bookmark {
     required this.createdAt,
     this.label,
     this.note,
+    this.clipStartMs,
+    this.clipEndMs,
   });
 
   final String id;
@@ -24,12 +26,20 @@ class Bookmark {
   final DateTime createdAt;
   final String? label;
   final String? note;
+  final int? clipStartMs;
+  final int? clipEndMs;
+
+  bool get isClip =>
+      clipStartMs != null && clipEndMs != null && clipEndMs! > clipStartMs!;
 
   Bookmark copyWith({
     String? label,
     String? note,
     bool clearLabel = false,
     bool clearNote = false,
+    int? clipStartMs,
+    int? clipEndMs,
+    bool clearClipRange = false,
   }) {
     return Bookmark(
       id: id,
@@ -38,6 +48,8 @@ class Bookmark {
       createdAt: createdAt,
       label: clearLabel ? null : (label ?? this.label),
       note: clearNote ? null : (note ?? this.note),
+      clipStartMs: clearClipRange ? null : (clipStartMs ?? this.clipStartMs),
+      clipEndMs: clearClipRange ? null : (clipEndMs ?? this.clipEndMs),
     );
   }
 
@@ -49,6 +61,8 @@ class Bookmark {
       'createdAt': createdAt.toIso8601String(),
       'label': label,
       'note': note,
+      'clipStartMs': clipStartMs,
+      'clipEndMs': clipEndMs,
     };
   }
 
@@ -61,6 +75,8 @@ class Bookmark {
           DateTime.fromMillisecondsSinceEpoch(0),
       label: map['label'] as String?,
       note: map['note'] as String?,
+      clipStartMs: map['clipStartMs'] as int?,
+      clipEndMs: map['clipEndMs'] as int?,
     );
   }
 }
@@ -133,6 +149,42 @@ class BookmarksNotifier extends Notifier<List<Bookmark>> {
         createdAt: DateTime.now(),
         label: _normalize(label),
         note: _normalize(note),
+      ),
+      ...state,
+    ];
+
+    state = next;
+    await _persist();
+  }
+
+  Future<void> addClip({
+    required String bookId,
+    required Duration start,
+    required Duration end,
+    String? label,
+    String? note,
+  }) async {
+    final startMs = start.inMilliseconds;
+    final endMs = end.inMilliseconds;
+    if (endMs <= startMs) return;
+
+    final duplicate = state.where((b) => b.bookId == bookId && b.isClip).any(
+          (b) =>
+              ((b.clipStartMs ?? 0) - startMs).abs() <= 1500 &&
+              ((b.clipEndMs ?? 0) - endMs).abs() <= 1500,
+        );
+    if (duplicate) return;
+
+    final next = [
+      Bookmark(
+        id: _uuid.v4(),
+        bookId: bookId,
+        positionMs: startMs,
+        createdAt: DateTime.now(),
+        label: _normalize(label),
+        note: _normalize(note),
+        clipStartMs: startMs,
+        clipEndMs: endMs,
       ),
       ...state,
     ];

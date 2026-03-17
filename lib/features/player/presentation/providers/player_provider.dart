@@ -1,11 +1,15 @@
 import 'dart:async';
 
+import 'package:audio_session/audio_session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:just_audio_background/just_audio_background.dart';
 import 'package:avdibook/features/audiobooks/domain/models/audiobook.dart';
+import 'package:avdibook/features/player/data/services/media_control_bridge.dart';
 import 'package:avdibook/shared/providers/app_state_provider.dart';
 import 'package:avdibook/shared/providers/library_provider.dart';
 import 'package:avdibook/shared/providers/listening_analytics_provider.dart';
+import 'package:avdibook/shared/providers/playback_history_provider.dart';
 import 'package:avdibook/shared/providers/storage_providers.dart';
 
 
@@ -21,6 +25,9 @@ class PlayerState {
     this.shuffleEnabled = false,
     this.loopMode = LoopMode.off,
     this.volume = 1.0,
+    this.trimSilence = false,
+    this.preservePitch = true,
+    this.pitch = 1.0,
     this.previousPosition,
     this.chapterRemaining = Duration.zero,
     this.bookRemaining = Duration.zero,
@@ -39,6 +46,9 @@ class PlayerState {
   final bool shuffleEnabled;
   final LoopMode loopMode;
   final double volume;
+  final bool trimSilence;
+  final bool preservePitch;
+  final double pitch;
   final Duration? previousPosition;
   final Duration chapterRemaining;
   final Duration bookRemaining;
@@ -64,6 +74,9 @@ class PlayerState {
     bool? shuffleEnabled,
     LoopMode? loopMode,
     double? volume,
+    bool? trimSilence,
+    bool? preservePitch,
+    double? pitch,
     Duration? previousPosition,
     bool clearPreviousPosition = false,
     Duration? chapterRemaining,
@@ -84,6 +97,9 @@ class PlayerState {
       shuffleEnabled: shuffleEnabled ?? this.shuffleEnabled,
       loopMode: loopMode ?? this.loopMode,
       volume: volume ?? this.volume,
+      trimSilence: trimSilence ?? this.trimSilence,
+      preservePitch: preservePitch ?? this.preservePitch,
+      pitch: pitch ?? this.pitch,
       previousPosition: clearPreviousPosition
           ? null
           : (previousPosition ?? this.previousPosition),
@@ -103,15 +119,53 @@ class PlayerNotifier extends Notifier<PlayerState> {
   String? _trackedBookId;
   bool _wasPlaying = false;
   DateTime _lastProgressPersistAt = DateTime.fromMillisecondsSinceEpoch(0);
+  DateTime? _lastPausedAt;
+  MediaControlBridge? _mediaBridge;
+  StreamSubscription<AudioInterruptionEvent>? _interruptionSub;
+  StreamSubscription<void>? _becomingNoisySub;
 
   @override
   PlayerState build() {
     final initialSpeed = ref.read(globalPlaybackSpeedProvider);
     final initialVolume = ref.read(globalVolumeProvider);
+    final initialVolumeBoost = ref.read(volumeBoostProvider);
+    final initialTrimSilence = ref.read(trimSilenceProvider);
+    final initialPreservePitch = ref.read(preservePitchProvider);
+    final initialPitch = ref.read(playbackPitchProvider);
 
     _player = AudioPlayer();
+    _mediaBridge = MediaControlBridge(ref);
+    unawaited(_mediaBridge?.initialize());
+    unawaited(_configureAudioSession());
     unawaited(_player.setSpeed(initialSpeed));
-    unawaited(_player.setVolume(initialVolume));
+    unawaited(_player.setVolume(_effectiveVolume(initialVolume, initialVolumeBoost)));
+    unawaited(_player.setSkipSilenceEnabled(initialTrimSilence));
+    unawaited(_player.setPitch(initialPreservePitch ? initialPitch : initialSpeed));
+
+    ref.listen<bool>(trimSilenceProvider, (_, next) {
+      unawaited(_player.setSkipSilenceEnabled(next));
+      state = state.copyWith(trimSilence: next);
+    });
+
+    ref.listen<bool>(preservePitchProvider, (_, next) {
+      final targetPitch = next ? ref.read(playbackPitchProvider) : state.speed;
+      unawaited(_player.setPitch(targetPitch));
+      state = state.copyWith(preservePitch: next, pitch: targetPitch);
+    });
+
+    ref.listen<double>(playbackPitchProvider, (_, next) {
+      final preservePitch = ref.read(preservePitchProvider);
+      if (!preservePitch) return;
+      unawaited(_player.setPitch(next));
+      state = state.copyWith(pitch: next);
+    });
+
+    ref.listen<double>(volumeBoostProvider, (_, __) {
+      final baseVolume = ref.read(globalVolumeProvider);
+      final boost = ref.read(volumeBoostProvider);
+      unawaited(_player.setVolume(_effectiveVolume(baseVolume, boost)));
+      state = state.copyWith(volume: _effectiveVolume(baseVolume, boost));
+    });
 
     _player.positionStream.listen((pos) {
       state = state.copyWith(position: pos);
@@ -129,6 +183,7 @@ class PlayerNotifier extends Notifier<PlayerState> {
     _player.playerStateStream.listen((ps) {
       state = state.copyWith(isPlaying: ps.playing);
       if (_wasPlaying && !ps.playing) {
+        _lastPausedAt = DateTime.now();
         unawaited(_flushListeningDeltaAndPersistProgress());
       }
       _wasPlaying = ps.playing;
@@ -147,10 +202,19 @@ class PlayerNotifier extends Notifier<PlayerState> {
 
     ref.onDispose(() {
       unawaited(_flushListeningDeltaAndPersistProgress());
+      unawaited(_mediaBridge?.dispose());
+      unawaited(_interruptionSub?.cancel());
+      unawaited(_becomingNoisySub?.cancel());
       _player.dispose();
     });
 
-    return PlayerState(speed: initialSpeed, volume: initialVolume);
+    return PlayerState(
+      speed: initialSpeed,
+      volume: initialVolume,
+      trimSilence: initialTrimSilence,
+      preservePitch: initialPreservePitch,
+      pitch: initialPitch,
+    );
   }
 
   Future<void> load(Audiobook book) async {
@@ -165,12 +229,19 @@ class PlayerNotifier extends Notifier<PlayerState> {
       if (book.chapters.isEmpty) {
         // Fallback: load source paths directly
         if (book.sourcePaths.length == 1) {
-          source = AudioSource.uri(Uri.file(book.sourcePaths.first));
+          source = AudioSource.uri(
+            Uri.file(book.sourcePaths.first),
+            tag: _mediaItem(book, book.sourcePaths.first, 0),
+          );
         } else {
           source = ConcatenatingAudioSource(
-            children: book.sourcePaths
-                .map((p) => AudioSource.uri(Uri.file(p)))
-                .toList(),
+            children: [
+              for (var i = 0; i < book.sourcePaths.length; i++)
+                AudioSource.uri(
+                  Uri.file(book.sourcePaths[i]),
+                  tag: _mediaItem(book, book.sourcePaths[i], i),
+                ),
+            ],
           );
         }
       } else {
@@ -182,12 +253,19 @@ class PlayerNotifier extends Notifier<PlayerState> {
           ..sort();
 
         if (uniquePaths.length == 1) {
-          source = AudioSource.uri(Uri.file(uniquePaths.first));
+          source = AudioSource.uri(
+            Uri.file(uniquePaths.first),
+            tag: _mediaItem(book, uniquePaths.first, 0),
+          );
         } else {
           source = ConcatenatingAudioSource(
-            children: uniquePaths
-                .map((p) => AudioSource.uri(Uri.file(p)))
-                .toList(),
+            children: [
+              for (var i = 0; i < uniquePaths.length; i++)
+                AudioSource.uri(
+                  Uri.file(uniquePaths[i]),
+                  tag: _mediaItem(book, uniquePaths[i], i),
+                ),
+            ],
           );
         }
       }
@@ -195,6 +273,9 @@ class PlayerNotifier extends Notifier<PlayerState> {
       await _player.setAudioSource(source);
       final resolvedSpeed = book.preferredSpeed ?? state.speed;
       await _player.setSpeed(resolvedSpeed);
+      if (!ref.read(preservePitchProvider)) {
+        await _player.setPitch(resolvedSpeed);
+      }
       await _player.setVolume(state.volume);
       final resumeFrom = book.resumePosition;
       if (resumeFrom != null && resumeFrom > Duration.zero) {
@@ -204,7 +285,13 @@ class PlayerNotifier extends Notifier<PlayerState> {
             : duration;
         await _player.seek(clamped);
       }
-      state = state.copyWith(isLoading: false, speed: resolvedSpeed);
+      state = state.copyWith(
+        isLoading: false,
+        speed: resolvedSpeed,
+        pitch: ref.read(preservePitchProvider)
+        ? ref.read(playbackPitchProvider)
+        : resolvedSpeed,
+      );
       _refreshDerivedProgress();
     } catch (_) {
       state = state.copyWith(
@@ -212,6 +299,43 @@ class PlayerNotifier extends Notifier<PlayerState> {
         error: 'Could not load audiobook. Check that the files still exist.',
       );
     }
+  }
+
+  Future<void> _configureAudioSession() async {
+    final session = await AudioSession.instance;
+    await session.configure(const AudioSessionConfiguration.music());
+
+    _interruptionSub = session.interruptionEventStream.listen((event) {
+      if (event.begin) {
+        if (_player.playing) {
+          _player.pause();
+        }
+      } else {
+        if (event.type == AudioInterruptionType.pause) {
+          _player.play();
+        }
+      }
+    });
+
+    _becomingNoisySub = session.becomingNoisyEventStream.listen((_) {
+      _player.pause();
+    });
+  }
+
+  MediaItem _mediaItem(Audiobook book, String filePath, int index) {
+    return MediaItem(
+      id: '${book.id}::$index::$filePath',
+      album: book.series,
+      title: book.title,
+      artist: book.author?.name,
+      artUri: book.coverPath == null ? null : Uri.file(book.coverPath!),
+      displayTitle: book.title,
+      displaySubtitle: book.author?.name,
+      extras: {
+        'bookId': book.id,
+        'chapterIndex': index,
+      },
+    );
   }
 
   void _refreshDerivedProgress() {
@@ -272,13 +396,42 @@ class PlayerNotifier extends Notifier<PlayerState> {
 
   void play() {
     final bookId = state.bookId;
+
+    final pausedAt = _lastPausedAt;
+    if (pausedAt != null) {
+      final elapsed = DateTime.now().difference(pausedAt);
+      final smartRewindSecs = ref.read(smartRewindSecsProvider);
+      if (elapsed >= const Duration(minutes: 1) && smartRewindSecs > 0) {
+        final rewindBy = Duration(seconds: smartRewindSecs);
+        final rewindTarget = state.position - rewindBy;
+        unawaited(_player.seek(rewindTarget < Duration.zero ? Duration.zero : rewindTarget));
+      }
+    }
+
     if (bookId != null && !_player.playing) {
       unawaited(ref.read(listeningAnalyticsProvider.notifier).startSession(bookId));
+      unawaited(
+        ref.read(playbackHistoryProvider.notifier).addEvent(
+              bookId: bookId,
+              position: state.position,
+              event: 'resume',
+            ),
+      );
     }
     _player.play();
   }
 
   void pause() {
+    final bookId = state.bookId;
+    if (bookId != null && _player.playing) {
+      unawaited(
+        ref.read(playbackHistoryProvider.notifier).addEvent(
+              bookId: bookId,
+              position: state.position,
+              event: 'pause',
+            ),
+      );
+    }
     _player.pause();
   }
 
@@ -320,7 +473,11 @@ class PlayerNotifier extends Notifier<PlayerState> {
 
   Future<void> setSpeed(double speed) async {
     await _player.setSpeed(speed);
-    state = state.copyWith(speed: speed);
+    final preservePitch = ref.read(preservePitchProvider);
+    if (!preservePitch) {
+      await _player.setPitch(speed);
+    }
+    state = state.copyWith(speed: speed, pitch: preservePitch ? state.pitch : speed);
     await ref.read(globalPlaybackSpeedProvider.notifier).set(speed);
 
     final bookId = state.bookId;
@@ -343,9 +500,15 @@ class PlayerNotifier extends Notifier<PlayerState> {
 
   Future<void> setVolume(double volume) async {
     final normalized = volume.clamp(0.0, 1.0);
-    await _player.setVolume(normalized);
-    state = state.copyWith(volume: normalized);
+    final boosted = _effectiveVolume(normalized, ref.read(volumeBoostProvider));
+    await _player.setVolume(boosted);
+    state = state.copyWith(volume: boosted);
     await ref.read(globalVolumeProvider.notifier).set(normalized);
+  }
+
+  double _effectiveVolume(double baseVolume, double boost) {
+    // Best effort "volume boost" within player constraints.
+    return (baseVolume * (1.0 + boost)).clamp(0.0, 1.6);
   }
 
   Future<void> toggleShuffle() async {
